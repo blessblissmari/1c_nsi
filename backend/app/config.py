@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 50
 
     @property
-    def CORS_ORIGINS(self) -> list[str]:  # noqa: N802
+    def CORS_ORIGINS(self) -> list[str]:
         return [x.strip() for x in self.CORS_ORIGINS_RAW.split(",") if x.strip()]
 
     # --- Database ---
@@ -56,11 +56,28 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str | None = None
     ADMIN_PASSWORD: str | None = None
 
-    # --- Yandex AI Studio ---
+    # --- AI-бэкенд ---
+    # "openai" или "yandex". Если OPENAI_API_KEY задан — по умолчанию "openai".
+    AI_BACKEND: Literal["openai", "yandex"] = "yandex"
+
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    # Yandex AI Studio
     YANDEX_API_KEY: str = ""
     YANDEX_IDENTIFICATOR: str = ""  # folder_id
     MODEL_URL: str = ""
     VECTOR_STORE_IDENTIFICATOR: str = ""
+
+    @property
+    def effective_ai_backend(self) -> Literal["openai", "yandex"]:
+        """Явно выставленный AI_BACKEND, иначе — по наличию ключа."""
+        if self.OPENAI_API_KEY and self.AI_BACKEND == "yandex" and not self.YANDEX_API_KEY:
+            return "openai"
+        return self.AI_BACKEND
 
     # Aliases kept for backward compatibility with legacy code paths.
     @property

@@ -4,6 +4,11 @@ from app.config import settings
 
 
 class YandexAIService:
+    """AI-сервис. Исторически реализован под Yandex AI Studio, но может работать
+    поверх OpenAI-совместимого API (`settings.AI_BACKEND="openai"` либо наличие
+    `OPENAI_API_KEY` при пустом `YANDEX_API_KEY`). Публичный интерфейс не меняется.
+    """
+
     def __init__(self):
         self._sdk = None
         self._assistant_id = None
@@ -11,6 +16,10 @@ class YandexAIService:
         self._api_key = settings.YANDEX_API_KEY
         self._model_uri = settings.YANDEX_MODEL_URL
         self._vector_store_id = settings.YANDEX_VECTOR_STORE_ID
+
+    @property
+    def _backend(self) -> str:
+        return settings.effective_ai_backend
 
     @property
     def sdk(self):
@@ -66,6 +75,12 @@ class YandexAIService:
         return None
 
     def _call_http(self, prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> str | None:
+        """Главный chat-completion вызов. Маршрутизируется по `effective_ai_backend`."""
+        if self._backend == "openai":
+            return self._call_openai(prompt, temperature=temperature, max_tokens=max_tokens)
+        return self._call_yandex_http(prompt, temperature=temperature, max_tokens=max_tokens)
+
+    def _call_yandex_http(self, prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> str | None:
         import httpx
 
         try:
@@ -103,7 +118,45 @@ class YandexAIService:
             logger.error(f"Yandex HTTP AI call error: {e}")
             return None
 
+    def _call_openai(self, prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> str | None:
+        """Chat completion через OpenAI-совместимый endpoint."""
+        import httpx
+
+        api_key = (settings.OPENAI_API_KEY or "").strip()
+        if not api_key:
+            logger.error("OPENAI_API_KEY не задан")
+            return None
+
+        try:
+            payload = {
+                "model": settings.OPENAI_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            resp = httpx.post(
+                f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=120,
+            )
+            if resp.status_code != 200:
+                logger.error(f"OpenAI error {resp.status_code}: {resp.text[:500]}")
+                return None
+            data = resp.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content")
+            return content.strip() if content else None
+        except Exception as e:
+            logger.error(f"OpenAI call error: {e}")
+            return None
+
     def _call_lite(self, prompt: str, temperature: float = 0.2, max_tokens: int = 2000) -> str | None:
+        """Fallback-вариант. На OpenAI = тот же `_call_http`."""
+        if self._backend == "openai":
+            return self._call_openai(prompt, temperature=temperature, max_tokens=max_tokens)
         try:
             model = self.sdk.models.completions("yandexgpt-lite").configure(
                 temperature=temperature,
@@ -162,7 +215,11 @@ class YandexAIService:
         """
         Yandex Web Search API wrapper via AI Studio SDK.
         Returns a compact list of {"title","url","snippet"}.
+        На OpenAI-бэкенде web_search недоступен — возвращаем пустой список,
+        вызывающий код корректно уходит на прямой LLM без evidence.
         """
+        if self._backend == "openai":
+            return []
         try:
             from yandex_ai_studio_sdk._search_api.enums import SearchType
 

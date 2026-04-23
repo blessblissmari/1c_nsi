@@ -1,8 +1,14 @@
 import ky, { HTTPError } from 'ky'
 import { useAuthStore } from '../auth/store'
 
+// Базовый URL API. В dev используем vite proxy ('/api/v1').
+// В прод-сборке (GitHub Pages и т.п.) указываем абсолютный URL на бэкенд через VITE_API_URL.
+const API_BASE_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api/v1`
+  : '/api/v1'
+
 const api = ky.create({
-  prefixUrl: '/api/v1',
+  prefixUrl: API_BASE_URL,
   timeout: 60000,
   hooks: {
     beforeRequest: [

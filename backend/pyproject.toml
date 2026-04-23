@@ -3,6 +3,29 @@ name = "nsi-backend"
 version = "1.0.0"
 description = "Инструмент НСИ — backend"
 requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy>=2.0",
+    "alembic>=1.14",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.6",
+    "yandex-ai-studio-sdk",
+    "openpyxl>=3.1",
+    "pdfplumber>=0.11",
+    "python-docx>=1.1",
+    "python-dotenv>=1.0",
+    "httpx>=0.28",
+    "loguru>=0.7",
+    "python-multipart>=0.0.18",
+    "aiofiles>=24.1",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.0.1",
+    "PyJWT>=2.9",
+    "email-validator>=2.2",
+    "slowapi>=0.1.9",
+    "psycopg2-binary>=2.9",
+]
 
 [tool.ruff]
 line-length = 110
