@@ -1,10 +1,35 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, Boolean, ForeignKey, DateTime, JSON,
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
 )
-from sqlalchemy.orm import relationship, Mapped, mapped_column
-from datetime import datetime, UTC
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class User(Base):
+    """Локальный пользователь системы."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
 
 class HierarchyNode(Base):
@@ -71,7 +96,9 @@ class EquipmentModel(Base):
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
     hierarchy_node = relationship("HierarchyNode", back_populates="models")
     eq_class = relationship("EquipmentClass")
@@ -82,7 +109,9 @@ class EquipmentModel(Base):
     bom_items = relationship("BOMItem", back_populates="model", cascade="all, delete-orphan")
     apl_items = relationship("APLItem", back_populates="model", cascade="all, delete-orphan")
     components = relationship("TORComponent", back_populates="model", cascade="all, delete-orphan")
-    reliability_metrics = relationship("ReliabilityMetric", back_populates="model", cascade="all, delete-orphan")
+    reliability_metrics = relationship(
+        "ReliabilityMetric", back_populates="model", cascade="all, delete-orphan"
+    )
 
 
 class Document(Base):

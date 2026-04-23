@@ -1,0 +1,9 @@
+Alembic миграции для Инструмента НСИ.
+
+Команды (выполнять из backend/):
+
+    alembic upgrade head                   # применить все
+    alembic revision --autogenerate -m "…" # создать новую
+    alembic downgrade -1                   # откат на одну ревизию
+
+Версии: backend/alembic/versions/*.py

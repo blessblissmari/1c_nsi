@@ -1,7 +1,9 @@
-# -*- coding: utf-8 -*-
 """Mineru document parsing service"""
-import httpx
+
 import logging
+
+import httpx
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)

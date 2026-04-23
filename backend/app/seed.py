@@ -1,19 +1,26 @@
 import sys
-import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from app.database import SessionLocal, init_db
-from app.models.models import (
-    EquipmentClass, EquipmentSubclass, EquipmentModel, Characteristic, Unit,
-    NormalizationRule, Operation, HierarchyNode, MaintenanceType,
-    TORComponent, ComponentOperation,
-)
-from app.services.file_parser import parse_xlsx
-from app.services.normalization import normalize_model_name, normalize_operation_name, normalize_class_name
 from loguru import logger
 
+from app.database import SessionLocal, init_db
+from app.models.models import (
+    Characteristic,
+    ComponentOperation,
+    EquipmentClass,
+    EquipmentModel,
+    EquipmentSubclass,
+    HierarchyNode,
+    MaintenanceType,
+    NormalizationRule,
+    Operation,
+    TORComponent,
+    Unit,
+)
+from app.services.file_parser import parse_xlsx
+from app.services.normalization import normalize_class_name, normalize_model_name, normalize_operation_name
 
 SEED_DIR = Path(__file__).resolve().parent.parent.parent / "ДОКУМЕНТЫ ДЛЯ РАБОТЫ"
 
@@ -49,10 +56,14 @@ def seed_classes_and_subclasses(db):
         sub = None
         if subclass_name:
             subclass_name = normalize_class_name(str(subclass_name))
-            sub = db.query(EquipmentSubclass).filter(
-                EquipmentSubclass.name == subclass_name,
-                EquipmentSubclass.class_id == cls.id,
-            ).first()
+            sub = (
+                db.query(EquipmentSubclass)
+                .filter(
+                    EquipmentSubclass.name == subclass_name,
+                    EquipmentSubclass.class_id == cls.id,
+                )
+                .first()
+            )
             if not sub:
                 sub = EquipmentSubclass(name=subclass_name, class_id=cls.id)
                 db.add(sub)
@@ -79,11 +90,15 @@ def seed_classes_and_subclasses(db):
                     created_u += 1
                 unit_id = unit.id
 
-            existing = db.query(Characteristic).filter(
-                Characteristic.name == char_name,
-                Characteristic.class_id == cls.id,
-                Characteristic.subclass_id == sub.id if sub else None,
-            ).first()
+            existing = (
+                db.query(Characteristic)
+                .filter(
+                    Characteristic.name == char_name,
+                    Characteristic.class_id == cls.id,
+                    Characteristic.subclass_id == sub.id if sub else None,
+                )
+                .first()
+            )
             if not existing:
                 char = Characteristic(
                     name=char_name,
@@ -95,7 +110,9 @@ def seed_classes_and_subclasses(db):
                 created_char += 1
 
     db.commit()
-    logger.info(f"Seeded {created_c} classes, {created_s} subclasses, {created_char} characteristics, {created_u} units from Classifier")
+    logger.info(
+        f"Seeded {created_c} classes, {created_s} subclasses, {created_char} characteristics, {created_u} units from Classifier"
+    )
 
 
 def seed_models(db):
@@ -116,9 +133,7 @@ def seed_models(db):
         if not model_name:
             continue
 
-        existing = db.query(EquipmentModel).filter(
-            EquipmentModel.original_name == model_name
-        ).first()
+        existing = db.query(EquipmentModel).filter(EquipmentModel.original_name == model_name).first()
 
         if not existing:
             norm_name = normalize_model_name(model_name)
@@ -188,23 +203,35 @@ def seed_classification(db):
             continue
 
         norm_name = normalize_model_name(str(model_name))
-        model = db.query(EquipmentModel).filter(
-            (EquipmentModel.normalized_name == norm_name) |
-            (EquipmentModel.original_name == str(model_name))
-        ).first()
+        model = (
+            db.query(EquipmentModel)
+            .filter(
+                (EquipmentModel.normalized_name == norm_name)
+                | (EquipmentModel.original_name == str(model_name))
+            )
+            .first()
+        )
 
         if not model:
             continue
 
-        cls = db.query(EquipmentClass).filter(EquipmentClass.name == normalize_class_name(str(class_name))).first()
+        cls = (
+            db.query(EquipmentClass)
+            .filter(EquipmentClass.name == normalize_class_name(str(class_name)))
+            .first()
+        )
         if cls:
             model.class_id = cls.id
 
             if subclass_name:
-                sub = db.query(EquipmentSubclass).filter(
-                    EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
-                    EquipmentSubclass.class_id == cls.id,
-                ).first()
+                sub = (
+                    db.query(EquipmentSubclass)
+                    .filter(
+                        EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
+                        EquipmentSubclass.class_id == cls.id,
+                    )
+                    .first()
+                )
                 if sub:
                     model.subclass_id = sub.id
 
@@ -330,11 +357,15 @@ def seed_maintenance_types(db):
 
         norm_name = normalize_operation_name(str(name))
 
-        existing = db.query(MaintenanceType).filter(
-            MaintenanceType.normalized_name == norm_name,
-            MaintenanceType.model_id.is_(None),
-            MaintenanceType.class_id.is_(None),
-        ).first()
+        existing = (
+            db.query(MaintenanceType)
+            .filter(
+                MaintenanceType.normalized_name == norm_name,
+                MaintenanceType.model_id.is_(None),
+                MaintenanceType.class_id.is_(None),
+            )
+            .first()
+        )
 
         if not existing:
             mt = MaintenanceType(
@@ -367,10 +398,13 @@ def seed_model_maintenance(db):
             continue
 
         norm = normalize_model_name(str(model_name))
-        model = db.query(EquipmentModel).filter(
-            (EquipmentModel.normalized_name == norm) |
-            (EquipmentModel.original_name == str(model_name))
-        ).first()
+        model = (
+            db.query(EquipmentModel)
+            .filter(
+                (EquipmentModel.normalized_name == norm) | (EquipmentModel.original_name == str(model_name))
+            )
+            .first()
+        )
         if not model:
             continue
 
@@ -381,10 +415,14 @@ def seed_model_maintenance(db):
                 continue
 
             norm_vv = normalize_operation_name(str(vv_name))
-            existing = db.query(MaintenanceType).filter(
-                MaintenanceType.model_id == model.id,
-                MaintenanceType.normalized_name == norm_vv,
-            ).first()
+            existing = (
+                db.query(MaintenanceType)
+                .filter(
+                    MaintenanceType.model_id == model.id,
+                    MaintenanceType.normalized_name == norm_vv,
+                )
+                .first()
+            )
 
             if not existing:
                 mt = MaintenanceType(
@@ -422,19 +460,25 @@ def seed_tor_components(db):
         if not class_name:
             continue
 
-        cls = db.query(EquipmentClass).filter(
-            EquipmentClass.name == normalize_class_name(str(class_name))
-        ).first()
+        cls = (
+            db.query(EquipmentClass)
+            .filter(EquipmentClass.name == normalize_class_name(str(class_name)))
+            .first()
+        )
 
         if not cls:
             continue
 
         sub = None
         if subclass_name:
-            sub = db.query(EquipmentSubclass).filter(
-                EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
-                EquipmentSubclass.class_id == cls.id,
-            ).first()
+            sub = (
+                db.query(EquipmentSubclass)
+                .filter(
+                    EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
+                    EquipmentSubclass.class_id == cls.id,
+                )
+                .first()
+            )
 
         models_q = db.query(EquipmentModel).filter(EquipmentModel.class_id == cls.id)
         if sub:
@@ -445,11 +489,15 @@ def seed_tor_components(db):
             continue
 
         for model in models:
-            existing_parent = db.query(TORComponent).filter(
-                TORComponent.model_id == model.id,
-                TORComponent.name == str(element),
-                TORComponent.parent_id.is_(None),
-            ).first()
+            existing_parent = (
+                db.query(TORComponent)
+                .filter(
+                    TORComponent.model_id == model.id,
+                    TORComponent.name == str(element),
+                    TORComponent.parent_id.is_(None),
+                )
+                .first()
+            )
             if not existing_parent:
                 comp = TORComponent(
                     model_id=model.id,
@@ -464,11 +512,15 @@ def seed_tor_components(db):
                 created += 1
 
             if subelement and str(subelement).strip():
-                existing_child = db.query(TORComponent).filter(
-                    TORComponent.model_id == model.id,
-                    TORComponent.name == str(subelement),
-                    TORComponent.parent_id == existing_parent.id,
-                ).first()
+                existing_child = (
+                    db.query(TORComponent)
+                    .filter(
+                        TORComponent.model_id == model.id,
+                        TORComponent.name == str(subelement),
+                        TORComponent.parent_id == existing_parent.id,
+                    )
+                    .first()
+                )
                 if not existing_child:
                     comp = TORComponent(
                         model_id=model.id,
@@ -504,22 +556,26 @@ def seed_component_operations(db):
         if not operation_name or not class_name:
             continue
 
-        op = db.query(Operation).filter(
-            Operation.name == str(operation_name)
-        ).first()
+        op = db.query(Operation).filter(Operation.name == str(operation_name)).first()
 
-        cls = db.query(EquipmentClass).filter(
-            EquipmentClass.name == normalize_class_name(str(class_name))
-        ).first()
+        cls = (
+            db.query(EquipmentClass)
+            .filter(EquipmentClass.name == normalize_class_name(str(class_name)))
+            .first()
+        )
         if not cls:
             continue
 
         sub = None
         if subclass_name:
-            sub = db.query(EquipmentSubclass).filter(
-                EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
-                EquipmentSubclass.class_id == cls.id,
-            ).first()
+            sub = (
+                db.query(EquipmentSubclass)
+                .filter(
+                    EquipmentSubclass.name == normalize_class_name(str(subclass_name)),
+                    EquipmentSubclass.class_id == cls.id,
+                )
+                .first()
+            )
 
         models_q = db.query(EquipmentModel).filter(EquipmentModel.class_id == cls.id)
         if sub:
@@ -537,10 +593,14 @@ def seed_component_operations(db):
             if not comp:
                 continue
 
-            existing = db.query(ComponentOperation).filter(
-                ComponentOperation.component_id == comp.id,
-                ComponentOperation.operation_id == op.id if op else None,
-            ).first()
+            existing = (
+                db.query(ComponentOperation)
+                .filter(
+                    ComponentOperation.component_id == comp.id,
+                    ComponentOperation.operation_id == op.id if op else None,
+                )
+                .first()
+            )
 
             if not existing:
                 co = ComponentOperation(

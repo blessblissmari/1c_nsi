@@ -1,0 +1,49 @@
+[project]
+name = "nsi-backend"
+version = "1.0.0"
+description = "Инструмент НСИ — backend"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL", "RUF",
+]
+ignore = [
+    "E501",    # line too long (handled by formatter)
+    "PLR0913", # too many arguments
+    "PLR2004", # magic values (bizdomain is full of them)
+    "B008",    # FastAPI Depends() in defaults is idiomatic
+    "PLR0911", "PLR0912", "PLR0915",
+    "RUF001", "RUF002", "RUF003",  # Russian cyrillic homoglyphs — intentional
+    "B904",    # raise-from not required for HTTPException rewrites
+    "PLC0415", # lazy imports внутри функций — намеренный паттерн для тяжёлых зависимостей
+    "SIM102",  # nested if — читабельнее
+    "SIM108",  # ternary не всегда читабельнее
+    "SIM117",  # nested with внутри конструкторов fastapi
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+addopts = "-q --strict-markers"
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true
+disallow_untyped_defs = false
+exclude = ["alembic/versions/"]

@@ -113,9 +113,7 @@ def search_analogs_in_db(
                     continue
                 if str(base_val).strip() == str(cand_val).strip():
                     continue
-                compare_items.append(
-                    {"name": key, "base_value": base_val, "candidate_value": cand_val}
-                )
+                compare_items.append({"name": key, "base_value": base_val, "candidate_value": cand_val})
 
         if score < 0.35:
             continue

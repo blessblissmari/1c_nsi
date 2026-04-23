@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
 from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import HierarchyNode
-from app.schemas.schemas import MessageResponse
 
 router = APIRouter(prefix="/upper-levels", tags=["Окно 2 — Карточки верхних уровней"])
 

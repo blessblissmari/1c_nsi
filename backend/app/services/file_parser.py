@@ -1,11 +1,10 @@
-from pathlib import Path
-from loguru import logger
-
-import openpyxl
-
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
+
+import openpyxl
+from loguru import logger
 
 
 def _clean(val):
@@ -30,7 +29,7 @@ def parse_xlsx(file_path: str | Path, sheet_name: str | None = None, header_row:
     headers = [_clean(h) or f"col_{i}" for i, h in enumerate(rows[header_row])]
     data = []
 
-    for row in rows[header_row + 1:]:
+    for row in rows[header_row + 1 :]:
         item = {}
         for i, val in enumerate(row):
             if i < len(headers):

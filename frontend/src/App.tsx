@@ -9,12 +9,23 @@ import { SpecificationsWorkspace } from './components/workspaces/SpecificationsW
 import { ReliabilityWorkspace } from './components/workspaces/ReliabilityWorkspace'
 import { ChatWorkspace } from './components/workspaces/ChatWorkspace'
 import { ParserWorkspace } from './components/workspaces/ParserWorkspace'
+import { LoginPage } from './auth/LoginPage'
+import { RegisterPage } from './auth/RegisterPage'
+import { RequireAuth } from './auth/RequireAuth'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<AppLayout />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route
+          element={
+            <RequireAuth>
+              <AppLayout />
+            </RequireAuth>
+          }
+        >
           <Route path="/" element={<HierarchyWorkspace />} />
           <Route path="/hierarchy" element={<HierarchyWorkspace />} />
           <Route path="/upper-levels" element={<UpperLevelsWorkspace />} />

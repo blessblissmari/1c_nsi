@@ -1,6 +1,7 @@
+from collections.abc import Generator
+
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from typing import Generator
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
 
@@ -10,6 +11,7 @@ engine = create_engine(
     echo=False,
 )
 
+
 # Enable WAL mode and increase busy timeout for better concurrency
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
@@ -18,6 +20,7 @@ def set_sqlite_pragma(dbapi_conn, connection_record):
     cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -41,11 +44,29 @@ def init_db() -> None:
 def reset_db() -> None:
     """Reset database to clean state - delete all data but keep structure"""
     from app.models.models import (
-        OperationTMC, ComponentOperation, TORComponent, ReliabilityMetric,
-        APLItem, BOMItem, MaintenanceType, TORCharacteristic, Document,
-        EquipmentModel, ClassificationRule, EquipmentSubclass, EquipmentClass, Characteristic,
-        Unit, NormalizationRule, Operation, HierarchyNode, Profession, Qualification, LaborNorm
+        APLItem,
+        BOMItem,
+        Characteristic,
+        ClassificationRule,
+        ComponentOperation,
+        Document,
+        EquipmentClass,
+        EquipmentModel,
+        EquipmentSubclass,
+        HierarchyNode,
+        LaborNorm,
+        MaintenanceType,
+        NormalizationRule,
+        Operation,
+        OperationTMC,
+        Profession,
+        Qualification,
+        ReliabilityMetric,
+        TORCharacteristic,
+        TORComponent,
+        Unit,
     )
+
     db = SessionLocal()
     try:
         db.query(OperationTMC).delete()
@@ -70,7 +91,7 @@ def reset_db() -> None:
         db.query(Profession).delete()
         db.query(HierarchyNode).delete()
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise
     finally:

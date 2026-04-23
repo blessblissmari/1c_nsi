@@ -1,10 +1,29 @@
-import os, sys
-os.chdir(r'C:\Users\bliss\Documents\Code\1c_nsi\backend')
-os.environ['DATABASE_URL'] = 'sqlite:///C:/Users/bliss/Documents/Code/1c_nsi/backend/nsi_data.db'
+"""Entry point для локального запуска backend'а.
 
-if __name__ == '__main__':
-    from multiprocessing import freeze_support
-    freeze_support()
-    sys.argv = ['uvicorn', 'app.main:app', '--port', '8000']
-    from uvicorn.main import main
+В проде используется `uvicorn app.main:app` напрямую (см. Dockerfile).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+def main() -> None:
+    backend_dir = Path(__file__).resolve().parent
+    os.chdir(backend_dir)
+    sys.path.insert(0, str(backend_dir))
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
+        reload=os.getenv("APP_ENV", "development") == "development",
+    )
+
+
+if __name__ == "__main__":
     main()

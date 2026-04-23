@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 
 class HierarchyNodeBase(BaseModel):
