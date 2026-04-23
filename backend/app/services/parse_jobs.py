@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
-from pathlib import Path
+import json
 import threading
 import uuid
-import json
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 from loguru import logger
 
@@ -13,7 +13,7 @@ from .file_parser import parse_file
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass

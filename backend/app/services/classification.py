@@ -1,9 +1,9 @@
-from difflib import SequenceMatcher
 import re
+from difflib import SequenceMatcher
 
 from sqlalchemy.orm import Session
 
-from app.models.models import ClassificationRule, EquipmentClass, EquipmentModel, EquipmentSubclass
+from app.models.models import ClassificationRule, EquipmentClass, EquipmentModel
 from app.services.normalization import normalize_model_name
 
 

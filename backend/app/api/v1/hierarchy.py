@@ -1,23 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session, joinedload
-from typing import Any
 
 from app.database import get_db
 from app.models.models import (
-    HierarchyNode, EquipmentModel, EquipmentClass, EquipmentSubclass,
-    Document, NormalizationRule, ClassificationRule,
+    ClassificationRule,
+    Document,
+    EquipmentClass,
+    EquipmentModel,
+    EquipmentSubclass,
+    HierarchyNode,
+    NormalizationRule,
 )
 from app.schemas.schemas import (
-    HierarchyNodeCreate, HierarchyNodeRead, HierarchyTreeRead,
-    EquipmentModelCreate, EquipmentModelRead, EquipmentModelUpdate, EquipmentModelDetail,
-    EquipmentClassCreate, EquipmentClassRead, EquipmentSubclassCreate, EquipmentSubclassRead,
-    DocumentRead, NormalizationRuleCreate, NormalizationRuleRead,
-    MessageResponse, BulkVerifyRequest,
+    BulkVerifyRequest,
+    DocumentRead,
+    EquipmentClassCreate,
+    EquipmentClassRead,
+    EquipmentModelCreate,
+    EquipmentModelDetail,
+    EquipmentModelRead,
+    EquipmentModelUpdate,
+    EquipmentSubclassCreate,
+    EquipmentSubclassRead,
+    HierarchyNodeCreate,
+    HierarchyNodeRead,
+    HierarchyTreeRead,
+    MessageResponse,
+    NormalizationRuleCreate,
+    NormalizationRuleRead,
 )
-from app.services.normalization import normalize_model_name
-from app.services.classification import classify_model_by_classifier, classify_all_models
 from app.services.ai_service import yandex_ai
-from app.services.file_parser import parse_file, detect_file_type
+from app.services.classification import classify_all_models
+from app.services.file_parser import detect_file_type, parse_file
+from app.services.normalization import normalize_model_name
 
 router = APIRouter(prefix="/hierarchy", tags=["Окно 1 — Иерархия и модели"])
 
@@ -32,13 +47,15 @@ def _build_tree(nodes: list[HierarchyNode]) -> list[HierarchyTreeRead]:
     result = []
     for node in nodes:
         children = _build_tree(node.children) if node.children else []
-        result.append(HierarchyTreeRead(
-            id=node.id,
-            name=node.name,
-            parent_id=node.parent_id,
-            level_type=node.level_type,
-            children=children,
-        ))
+        result.append(
+            HierarchyTreeRead(
+                id=node.id,
+                name=node.name,
+                parent_id=node.parent_id,
+                level_type=node.level_type,
+                children=children,
+            )
+        )
     return result
 
 
@@ -75,8 +92,10 @@ def delete_hierarchy_node(node_id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload-hierarchy", response_model=MessageResponse)
 async def upload_hierarchy(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -96,12 +115,16 @@ async def upload_hierarchy(file: UploadFile = File(...), db: Session = Depends(g
                 if not lvl_val or str(lvl_val).strip() == "None":
                     continue
                 name = str(lvl_val).strip()
-                existing = db.query(HierarchyNode).filter(
-                    HierarchyNode.name == name,
-                    HierarchyNode.parent_id == parent_id,
-                ).first()
+                existing = (
+                    db.query(HierarchyNode)
+                    .filter(
+                        HierarchyNode.name == name,
+                        HierarchyNode.parent_id == parent_id,
+                    )
+                    .first()
+                )
                 if not existing:
-                    node = HierarchyNode(name=name, level_type=f"Уровень {lvl_idx+1}", parent_id=parent_id)
+                    node = HierarchyNode(name=name, level_type=f"Уровень {lvl_idx + 1}", parent_id=parent_id)
                     db.add(node)
                     db.flush()
                     existing = node
@@ -111,9 +134,13 @@ async def upload_hierarchy(file: UploadFile = File(...), db: Session = Depends(g
             model_name = row.get("Модель")
             if model_name and str(model_name).strip() != "None":
                 model_name = str(model_name).strip()
-                existing_model = db.query(EquipmentModel).filter(
-                    EquipmentModel.original_name == model_name,
-                ).first()
+                existing_model = (
+                    db.query(EquipmentModel)
+                    .filter(
+                        EquipmentModel.original_name == model_name,
+                    )
+                    .first()
+                )
                 if not existing_model:
                     norm = normalize_model_name(model_name)
                     m = EquipmentModel(
@@ -133,8 +160,10 @@ async def upload_hierarchy(file: UploadFile = File(...), db: Session = Depends(g
 
 @router.get("/models", response_model=list[EquipmentModelRead])
 def get_models(
-    skip: int = 0, limit: int = 100,
-    class_id: int | None = None, has_class: bool | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    class_id: int | None = None,
+    has_class: bool | None = None,
     q: str | None = None,
     db: Session = Depends(get_db),
 ):
@@ -148,19 +177,23 @@ def get_models(
     if q:
         search_term = f"%{q}%"
         q_filter = q_filter.filter(
-            (EquipmentModel.original_name.ilike(search_term)) | 
-            (EquipmentModel.normalized_name.ilike(search_term)) |
-            (EquipmentModel.model_code.ilike(search_term))
+            (EquipmentModel.original_name.ilike(search_term))
+            | (EquipmentModel.normalized_name.ilike(search_term))
+            | (EquipmentModel.model_code.ilike(search_term))
         )
     return q_filter.offset(skip).limit(limit).all()
 
 
 @router.get("/models/{model_id}", response_model=EquipmentModelDetail)
 def get_model_detail(model_id: int, db: Session = Depends(get_db)):
-    model = db.query(EquipmentModel).options(
-        joinedload(EquipmentModel.eq_class),
-        joinedload(EquipmentModel.eq_subclass),
-    ).get(model_id)
+    model = (
+        db.query(EquipmentModel)
+        .options(
+            joinedload(EquipmentModel.eq_class),
+            joinedload(EquipmentModel.eq_subclass),
+        )
+        .get(model_id)
+    )
     if not model:
         raise HTTPException(404, "Model not found")
 
@@ -211,8 +244,10 @@ def update_model(model_id: int, data: EquipmentModelUpdate, db: Session = Depend
 
 @router.post("/upload-models", response_model=MessageResponse)
 async def upload_models(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -288,8 +323,10 @@ def create_subclass(data: EquipmentSubclassCreate, db: Session = Depends(get_db)
 
 @router.post("/upload-classifier", response_model=MessageResponse)
 async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -312,9 +349,25 @@ async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(
             return None
 
         for row in rows:
-            class_name = pick(row, "\u041a\u043b\u0430\u0441\u0441", "class", "\u041a\u043b\u0430\u0441\u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f")
-            subclass_name = pick(row, "\u041f\u043e\u0434\u043a\u043b\u0430\u0441\u0441", "subclass", "\u041f\u043e\u0434\u043a\u043b\u0430\u0441\u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f")
-            model_name = pick(row, "\u041c\u043e\u0434\u0435\u043b\u044c", "model", "\u041c\u043e\u0434\u0435\u043b\u044c \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f", "\u041a\u043e\u0434 \u043c\u043e\u0434\u0435\u043b\u0438")
+            class_name = pick(
+                row,
+                "\u041a\u043b\u0430\u0441\u0441",
+                "class",
+                "\u041a\u043b\u0430\u0441\u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f",
+            )
+            subclass_name = pick(
+                row,
+                "\u041f\u043e\u0434\u043a\u043b\u0430\u0441\u0441",
+                "subclass",
+                "\u041f\u043e\u0434\u043a\u043b\u0430\u0441\u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f",
+            )
+            model_name = pick(
+                row,
+                "\u041c\u043e\u0434\u0435\u043b\u044c",
+                "model",
+                "\u041c\u043e\u0434\u0435\u043b\u044c \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f",
+                "\u041a\u043e\u0434 \u043c\u043e\u0434\u0435\u043b\u0438",
+            )
 
             if not class_name:
                 continue
@@ -330,10 +383,14 @@ async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(
 
             subclass_id = None
             if subclass_name:
-                existing_sub = db.query(EquipmentSubclass).filter(
-                    EquipmentSubclass.name == subclass_name,
-                    EquipmentSubclass.class_id == cls.id,
-                ).first()
+                existing_sub = (
+                    db.query(EquipmentSubclass)
+                    .filter(
+                        EquipmentSubclass.name == subclass_name,
+                        EquipmentSubclass.class_id == cls.id,
+                    )
+                    .first()
+                )
                 if not existing_sub:
                     sub = EquipmentSubclass(name=subclass_name, class_id=cls.id)
                     db.add(sub)
@@ -346,9 +403,11 @@ async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(
             if model_name:
                 model_pattern = str(model_name).strip()
                 normalized_pattern = normalize_model_name(model_pattern)
-                existing_rule = db.query(ClassificationRule).filter(
-                    ClassificationRule.normalized_pattern == normalized_pattern
-                ).first()
+                existing_rule = (
+                    db.query(ClassificationRule)
+                    .filter(ClassificationRule.normalized_pattern == normalized_pattern)
+                    .first()
+                )
                 if existing_rule:
                     existing_rule.model_pattern = model_pattern
                     existing_rule.class_id = cls.id
@@ -356,13 +415,15 @@ async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(
                     existing_rule.source_type = "classifier_upload"
                     updated_rules += 1
                 else:
-                    db.add(ClassificationRule(
-                        model_pattern=model_pattern,
-                        normalized_pattern=normalized_pattern,
-                        class_id=cls.id,
-                        subclass_id=subclass_id,
-                        source_type="classifier_upload",
-                    ))
+                    db.add(
+                        ClassificationRule(
+                            model_pattern=model_pattern,
+                            normalized_pattern=normalized_pattern,
+                            class_id=cls.id,
+                            subclass_id=subclass_id,
+                            source_type="classifier_upload",
+                        )
+                    )
                     created_rules += 1
 
         db.commit()
@@ -376,7 +437,9 @@ async def upload_classifier(file: UploadFile = File(...), db: Session = Depends(
 @router.post("/classify-models", response_model=MessageResponse)
 def classify_models(db: Session = Depends(get_db)):
     result = classify_all_models(db)
-    return MessageResponse(message=f"Classified: {result['classified']}, Unclassified: {result['unclassified']}")
+    return MessageResponse(
+        message=f"Classified: {result['classified']}, Unclassified: {result['unclassified']}"
+    )
 
 
 @router.post("/classify-models-via-web", response_model=MessageResponse)
@@ -424,7 +487,9 @@ def classify_models_via_web(
     for model in models:
         tried += 1
         class_names = [c.name for c in classes]
-        ai_result = yandex_ai.classify_model_via_web_search_guess(model.normalized_name or model.original_name, class_names=class_names)
+        ai_result = yandex_ai.classify_model_via_web_search_guess(
+            model.normalized_name or model.original_name, class_names=class_names
+        )
         cls_name = (ai_result or {}).get("class_name")
         sub_name = (ai_result or {}).get("subclass_name")
 
@@ -466,7 +531,9 @@ def classify_models_via_web(
         classified += 1
 
     db.commit()
-    return MessageResponse(message=f"AI tried {tried} models, classified {classified} (no_ai={no_ai}, no_class_match={no_class_match})")
+    return MessageResponse(
+        message=f"AI tried {tried} models, classified {classified} (no_ai={no_ai}, no_class_match={no_class_match})"
+    )
 
 
 @router.post("/upload-documents/{model_id}", response_model=DocumentRead)
@@ -475,7 +542,10 @@ async def upload_document(model_id: int, file: UploadFile = File(...), db: Sessi
     if not model:
         raise HTTPException(404, "Model not found")
 
-    import aiofiles, os
+    import os
+
+    import aiofiles
+
     from app.config import settings
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -528,8 +598,10 @@ def create_normalization_rule(data: NormalizationRuleCreate, db: Session = Depen
 
 @router.post("/upload-normalization-rules", response_model=MessageResponse)
 async def upload_normalization_rules(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()

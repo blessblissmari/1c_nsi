@@ -1,9 +1,59 @@
-import ky from 'ky'
+import ky, { HTTPError } from 'ky'
+import { useAuthStore } from '../auth/store'
 
 const api = ky.create({
   prefixUrl: '/api/v1',
   timeout: 60000,
+  hooks: {
+    beforeRequest: [
+      (req) => {
+        const token = useAuthStore.getState().token
+        if (token) req.headers.set('Authorization', `Bearer ${token}`)
+      },
+    ],
+    afterResponse: [
+      (_req, _opts, res) => {
+        if (res.status === 401) {
+          useAuthStore.getState().logout()
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+            const next = encodeURIComponent(window.location.pathname + window.location.search)
+            window.location.href = `/login?next=${next}`
+          }
+        }
+        return res
+      },
+    ],
+  },
 })
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface UserRead {
+  id: number
+  email: string
+  full_name: string | null
+  is_active: boolean
+  is_admin: boolean
+}
+
+export const authApi = {
+  login: (email: string, password: string) =>
+    api.post('auth/login', { json: { email, password } }).json<LoginResponse>(),
+  register: (email: string, password: string, full_name?: string) =>
+    api.post('auth/register', { json: { email, password, full_name } }).json<UserRead>(),
+  me: () => api.get('auth/me').json<UserRead>(),
+}
+
+export function extractErrorMessage(err: unknown): string {
+  if (err instanceof HTTPError) {
+    return err.response.statusText || 'Ошибка сервера'
+  }
+  if (err instanceof Error) return err.message
+  return 'Неизвестная ошибка'
+}
 
 export const hierarchyApi = {
   getTree: () => api.get('hierarchy/tree').json<any[]>(),

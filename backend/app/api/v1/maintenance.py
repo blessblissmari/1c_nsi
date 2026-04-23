@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session
-from typing import Any
-from datetime import date
 from calendar import monthrange
+from datetime import date
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import EquipmentModel, MaintenanceType
 from app.schemas.schemas import (
-    MaintenanceTypeCreate, MaintenanceTypeRead, MaintenanceTypeUpdate,
-    MessageResponse, BulkVerifyRequest,
+    BulkVerifyRequest,
+    MaintenanceTypeCreate,
+    MaintenanceTypeRead,
+    MaintenanceTypeUpdate,
+    MessageResponse,
 )
 from app.services.ai_service import yandex_ai
 from app.services.normalization import normalize_operation_name, parse_periodicity_to_months
@@ -19,7 +23,8 @@ router = APIRouter(prefix="/maintenance", tags=["Окно 4 — ВВ и пери
 @router.get("/types", response_model=list[MaintenanceTypeRead])
 def get_maintenance_types(
     model_id: int | None = None,
-    skip: int = 0, limit: int = 100,
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
 ):
     q = db.query(MaintenanceType)
@@ -69,8 +74,10 @@ def delete_maintenance_type(type_id: int, db: Session = Depends(get_db)):
 
 @router.post("/upload-maintenance", response_model=MessageResponse)
 async def upload_maintenance(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -82,7 +89,9 @@ async def upload_maintenance(file: UploadFile = File(...), db: Session = Depends
         created = 0
         for row in rows:
             model_name = row.get("Модель") or row.get("model") or row.get("Код модели")
-            vv_name = row.get("Вид воздействия") or row.get("ВВ") or row.get("name") or row.get("Наименование")
+            vv_name = (
+                row.get("Вид воздействия") or row.get("ВВ") or row.get("name") or row.get("Наименование")
+            )
             periodicity = row.get("Периодичность") or row.get("periodicity")
 
             if not vv_name:
@@ -90,13 +99,15 @@ async def upload_maintenance(file: UploadFile = File(...), db: Session = Depends
 
             model_id = None
             if model_name:
-                model = db.query(EquipmentModel).filter(
-                    EquipmentModel.normalized_name == str(model_name)
-                ).first()
+                model = (
+                    db.query(EquipmentModel).filter(EquipmentModel.normalized_name == str(model_name)).first()
+                )
                 if not model:
-                    model = db.query(EquipmentModel).filter(
-                        EquipmentModel.original_name == str(model_name)
-                    ).first()
+                    model = (
+                        db.query(EquipmentModel)
+                        .filter(EquipmentModel.original_name == str(model_name))
+                        .first()
+                    )
                 if model:
                     model_id = model.id
 
@@ -125,9 +136,7 @@ def fill_from_source(model_id: int, db: Session = Depends(get_db)):
     if not model:
         raise HTTPException(404, "Model not found")
 
-    ai_results = yandex_ai.enrich_maintenance_via_vector_store(
-        model.normalized_name or model.original_name
-    )
+    ai_results = yandex_ai.enrich_maintenance_via_vector_store(model.normalized_name or model.original_name)
 
     created = 0
     for result in ai_results:
@@ -138,7 +147,9 @@ def fill_from_source(model_id: int, db: Session = Depends(get_db)):
             name=result.get("name", ""),
             normalized_name=normalize_operation_name(result.get("name", "")),
             periodicity_months=result.get("periodicity_months"),
-            periodicity=str(result.get("periodicity_months")) + " мес." if result.get("periodicity_months") else None,
+            periodicity=str(result.get("periodicity_months")) + " мес."
+            if result.get("periodicity_months")
+            else None,
             source_type=result.get("source", "vector_store"),
             confidence=result.get("confidence", 0.85),
         )
@@ -162,10 +173,14 @@ def enrich_from_web(model_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for result in ai_results:
-        existing = db.query(MaintenanceType).filter(
-            MaintenanceType.model_id == model_id,
-            MaintenanceType.name == result.get("name"),
-        ).first()
+        existing = (
+            db.query(MaintenanceType)
+            .filter(
+                MaintenanceType.model_id == model_id,
+                MaintenanceType.name == result.get("name"),
+            )
+            .first()
+        )
 
         if not existing:
             mt = MaintenanceType(
@@ -175,7 +190,9 @@ def enrich_from_web(model_id: int, db: Session = Depends(get_db)):
                 name=result.get("name", ""),
                 normalized_name=normalize_operation_name(result.get("name", "")),
                 periodicity_months=result.get("periodicity_months"),
-                periodicity=str(result.get("periodicity_months")) + " мес." if result.get("periodicity_months") else None,
+                periodicity=str(result.get("periodicity_months")) + " мес."
+                if result.get("periodicity_months")
+                else None,
                 source_type=result.get("source", "yandex_web"),
                 confidence=result.get("confidence", 0.7),
             )
@@ -227,7 +244,7 @@ def get_ppr_schedule(
         for mt in mts:
             if not mt.periodicity_months or mt.periodicity_months <= 0:
                 continue
-            step_months = max(1, int(round(mt.periodicity_months)))
+            step_months = max(1, round(mt.periodicity_months))
             dates = []
             cur = today
             horizon = _add_months(today, months_ahead)

@@ -1,25 +1,45 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy.orm import Session
 from difflib import SequenceMatcher
 
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models.models import EquipmentModel, TORComponent, ComponentOperation, OperationTMC, Operation, Profession, Qualification, LaborNorm
+from app.models.models import (
+    ComponentOperation,
+    EquipmentModel,
+    LaborNorm,
+    Operation,
+    OperationTMC,
+    Profession,
+    Qualification,
+    TORComponent,
+)
 from app.schemas.schemas import (
-    TORComponentCreate, TORComponentRead, TORComponentUpdate,
-    ComponentOperationCreate, ComponentOperationRead, ComponentOperationUpdate,
-    OperationTMCCreate, OperationTMCRead, OperationTMCUpdate,
-    TkVerifyRequest, MessageResponse,
-    OperationCreate, OperationRead,
-    ProfessionRead, QualificationRead,
+    ComponentOperationCreate,
+    ComponentOperationRead,
+    ComponentOperationUpdate,
+    MessageResponse,
+    OperationCreate,
+    OperationRead,
+    OperationTMCCreate,
+    OperationTMCRead,
+    OperationTMCUpdate,
+    ProfessionRead,
+    QualificationRead,
+    TkVerifyRequest,
+    TORComponentCreate,
+    TORComponentRead,
+    TORComponentUpdate,
 )
 from app.services.ai_service import yandex_ai
-from app.services.normalization import normalize_operation_name
 from app.services.file_parser import parse_xlsx
+from app.services.normalization import normalize_operation_name
 
 router = APIRouter(prefix="/tk", tags=["Окно 6 — ТК ТОиР"])
 
 
 # ── Resources: Professions / Qualifications / Labor Norms ───────────
+
 
 @router.get("/professions", response_model=list[ProfessionRead])
 def get_professions(db: Session = Depends(get_db)):
@@ -28,7 +48,8 @@ def get_professions(db: Session = Depends(get_db)):
 
 @router.post("/upload-professions", response_model=MessageResponse)
 async def upload_professions(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    import tempfile, os
+    import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(await file.read())
@@ -61,7 +82,8 @@ def get_qualifications(db: Session = Depends(get_db)):
 
 @router.post("/upload-qualifications", response_model=MessageResponse)
 async def upload_qualifications(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    import tempfile, os
+    import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(await file.read())
@@ -89,7 +111,8 @@ async def upload_qualifications(file: UploadFile = File(...), db: Session = Depe
 
 @router.post("/upload-labor-norms", response_model=MessageResponse)
 async def upload_labor_norms(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    import tempfile, os
+    import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(await file.read())
@@ -100,7 +123,12 @@ async def upload_labor_norms(file: UploadFile = File(...), db: Session = Depends
         created = 0
         for row in rows:
             op = row.get("Операция") or row.get("Наименование") or row.get("operation") or row.get("name")
-            hours = row.get("Трудоемкость") or row.get("Трудоёмкость") or row.get("Часы") or row.get("labor_hours")
+            hours = (
+                row.get("Трудоемкость")
+                or row.get("Трудоёмкость")
+                or row.get("Часы")
+                or row.get("labor_hours")
+            )
             if not op or hours is None:
                 continue
             op_norm = normalize_operation_name(str(op))
@@ -134,10 +162,14 @@ def fill_labor_from_source(model_id: int, db: Session = Depends(get_db)):
         return MessageResponse(message="No components")
 
     comp_ids = [c.id for c in comps]
-    ops = db.query(ComponentOperation).filter(
-        ComponentOperation.component_id.in_(comp_ids),
-        ComponentOperation.labor_hours.is_(None),
-    ).all()
+    ops = (
+        db.query(ComponentOperation)
+        .filter(
+            ComponentOperation.component_id.in_(comp_ids),
+            ComponentOperation.labor_hours.is_(None),
+        )
+        .all()
+    )
     if not ops:
         return MessageResponse(message="No empty labor hours")
 
@@ -147,7 +179,11 @@ def fill_labor_from_source(model_id: int, db: Session = Depends(get_db)):
 
     updated = 0
     for op in ops:
-        name = op.custom_name or (op.operation.normalized_name if op.operation else None) or (op.operation.name if op.operation else "")
+        name = (
+            op.custom_name
+            or (op.operation.normalized_name if op.operation else None)
+            or (op.operation.name if op.operation else "")
+        )
         op_norm = normalize_operation_name(str(name))
 
         # 1) Exact match by normalized name (+ optional profession/qualification)
@@ -192,10 +228,14 @@ def enrich_labor_from_web(model_id: int, db: Session = Depends(get_db)):
     class_name = model.eq_class.name if model and model.eq_class else None
 
     comp_ids = [c.id for c in comps]
-    ops = db.query(ComponentOperation).filter(
-        ComponentOperation.component_id.in_(comp_ids),
-        ComponentOperation.labor_hours.is_(None),
-    ).all()
+    ops = (
+        db.query(ComponentOperation)
+        .filter(
+            ComponentOperation.component_id.in_(comp_ids),
+            ComponentOperation.labor_hours.is_(None),
+        )
+        .all()
+    )
     if not ops:
         return MessageResponse(message="No empty labor hours")
 
@@ -241,7 +281,9 @@ def enrich_labor_from_web(model_id: int, db: Session = Depends(get_db)):
     db.commit()
     return MessageResponse(message=f"Enriched labor hours for {updated} operations from web")
 
+
 # ── Operation Catalog (standard operations) ─────────────────────────
+
 
 @router.get("/operation-catalog", response_model=list[OperationRead])
 def get_operation_catalog(
@@ -270,7 +312,8 @@ def create_operation_catalog_item(data: OperationCreate, db: Session = Depends(g
 
 @router.post("/upload-operation-catalog", response_model=MessageResponse)
 async def upload_operation_catalog(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    import tempfile, os
+    import os
+    import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(await file.read())
@@ -298,6 +341,7 @@ async def upload_operation_catalog(file: UploadFile = File(...), db: Session = D
 
 
 # ── Components ──────────────────────────────────────────────────────
+
 
 @router.get("/components", response_model=list[TORComponentRead])
 def get_components(model_id: int, db: Session = Depends(get_db)):
@@ -336,6 +380,7 @@ def delete_component(comp_id: int, db: Session = Depends(get_db)):
 
 
 # ── Component Operations ────────────────────────────────────────────
+
 
 @router.get("/operations", response_model=list[ComponentOperationRead])
 def get_operations(component_id: int, db: Session = Depends(get_db)):
@@ -383,6 +428,7 @@ def delete_operation(op_id: int, db: Session = Depends(get_db)):
 
 # ── Operation TMC ───────────────────────────────────────────────────
 
+
 @router.get("/tmc", response_model=list[OperationTMCRead])
 def get_tmc(operation_id: int, db: Session = Depends(get_db)):
     return db.query(OperationTMC).filter(OperationTMC.operation_id == operation_id).all()
@@ -421,15 +467,14 @@ def delete_tmc(tmc_id: int, db: Session = Depends(get_db)):
 
 # ── AI Fill / Enrich ───────────────────────────────────────────────
 
+
 @router.post("/fill-components/{model_id}", response_model=MessageResponse)
 def fill_components(model_id: int, db: Session = Depends(get_db)):
     model = db.query(EquipmentModel).get(model_id)
     if not model:
         raise HTTPException(404, "Model not found")
 
-    ai_results = yandex_ai.enrich_components_via_vector_store(
-        model.normalized_name or model.original_name
-    )
+    ai_results = yandex_ai.enrich_components_via_vector_store(model.normalized_name or model.original_name)
 
     created = 0
     for result in ai_results:
@@ -454,16 +499,18 @@ def enrich_components(model_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Model not found")
 
     class_name = model.eq_class.name if model.eq_class else None
-    ai_results = yandex_ai.enrich_components_via_web(
-        model.normalized_name or model.original_name, class_name
-    )
+    ai_results = yandex_ai.enrich_components_via_web(model.normalized_name or model.original_name, class_name)
 
     created = 0
     for result in ai_results:
-        existing = db.query(TORComponent).filter(
-            TORComponent.model_id == model_id,
-            TORComponent.name == result.get("name"),
-        ).first()
+        existing = (
+            db.query(TORComponent)
+            .filter(
+                TORComponent.model_id == model_id,
+                TORComponent.name == result.get("name"),
+            )
+            .first()
+        )
 
         if not existing:
             comp = TORComponent(
@@ -486,7 +533,6 @@ def fill_operations(component_id: int, db: Session = Depends(get_db)):
     if not comp:
         raise HTTPException(404, "Component not found")
 
-    model = comp.model
     ai_results = yandex_ai.enrich_operations_via_vector_store(comp.name)
 
     created = 0
@@ -528,10 +574,14 @@ def enrich_operations(component_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for result in ai_results:
-        existing = db.query(ComponentOperation).filter(
-            ComponentOperation.component_id == component_id,
-            ComponentOperation.custom_name == result.get("name"),
-        ).first()
+        existing = (
+            db.query(ComponentOperation)
+            .filter(
+                ComponentOperation.component_id == component_id,
+                ComponentOperation.custom_name == result.get("name"),
+            )
+            .first()
+        )
 
         if not existing:
             operation_id = None
@@ -598,10 +648,14 @@ def enrich_tmc(operation_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for result in ai_results:
-        existing = db.query(OperationTMC).filter(
-            OperationTMC.operation_id == operation_id,
-            OperationTMC.name == result.get("name"),
-        ).first()
+        existing = (
+            db.query(OperationTMC)
+            .filter(
+                OperationTMC.operation_id == operation_id,
+                OperationTMC.name == result.get("name"),
+            )
+            .first()
+        )
 
         if not existing:
             tmc = OperationTMC(
@@ -622,6 +676,7 @@ def enrich_tmc(operation_id: int, db: Session = Depends(get_db)):
 
 
 # ── Verify ──────────────────────────────────────────────────────────
+
 
 @router.post("/verify", response_model=MessageResponse)
 def bulk_verify(data: TkVerifyRequest, db: Session = Depends(get_db)):
@@ -646,6 +701,7 @@ def bulk_verify(data: TkVerifyRequest, db: Session = Depends(get_db)):
 
 
 # ── Tools / Reports ────────────────────────────────────────────────
+
 
 @router.post("/normalize-operations", response_model=MessageResponse)
 def normalize_operations_for_model(

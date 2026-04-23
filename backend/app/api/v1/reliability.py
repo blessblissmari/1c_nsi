@@ -1,24 +1,25 @@
 from __future__ import annotations
 
-from datetime import datetime
+import contextlib
 import csv
 import io
 import os
 import tempfile
+from datetime import datetime
 
 import openpyxl
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.models import EquipmentModel, ReliabilityMetric, FailureEvent
+from app.models.models import EquipmentModel, FailureEvent, ReliabilityMetric
 from app.schemas.schemas import (
+    BulkVerifyRequest,
+    FailureEventRead,
+    MessageResponse,
     ReliabilityMetricCreate,
     ReliabilityMetricRead,
     ReliabilityMetricUpdate,
-    BulkVerifyRequest,
-    MessageResponse,
-    FailureEventRead,
 )
 from app.services.ai_service import yandex_ai
 
@@ -67,9 +68,7 @@ def fill_from_source(model_id: int, db: Session = Depends(get_db)):
     if not model:
         raise HTTPException(404, "Model not found")
 
-    ai_results = yandex_ai.enrich_reliability_via_vector_store(
-        model.normalized_name or model.original_name
-    )
+    ai_results = yandex_ai.enrich_reliability_via_vector_store(model.normalized_name or model.original_name)
 
     created = 0
     for result in ai_results:
@@ -102,10 +101,14 @@ def enrich_from_web(model_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for result in ai_results:
-        existing = db.query(ReliabilityMetric).filter(
-            ReliabilityMetric.model_id == model_id,
-            ReliabilityMetric.metric_type == result.get("metric_type"),
-        ).first()
+        existing = (
+            db.query(ReliabilityMetric)
+            .filter(
+                ReliabilityMetric.model_id == model_id,
+                ReliabilityMetric.metric_type == result.get("metric_type"),
+            )
+            .first()
+        )
 
         if not existing:
             metric = ReliabilityMetric(
@@ -145,9 +148,7 @@ def get_failures(model_id: int, db: Session = Depends(get_db)):
 
 
 def _normalize_header(s: str) -> str:
-    return "".join(
-        ch.lower() for ch in s.strip() if ch.isalnum() or ch in ["_", "-", " "]
-    ).replace(" ", "")
+    return "".join(ch.lower() for ch in s.strip() if ch.isalnum() or ch in ["_", "-", " "]).replace(" ", "")
 
 
 def _parse_float(v) -> float | None:
@@ -263,9 +264,7 @@ async def upload_failures(file: UploadFile = File(...), db: Session = Depends(ge
             created += 1
 
         db.commit()
-        return MessageResponse(
-            message=f"Загружено отказов: {created} (пропущено строк: {skipped})"
-        )
+        return MessageResponse(message=f"Загружено отказов: {created} (пропущено строк: {skipped})")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         tmp.write(await file.read())
@@ -332,14 +331,10 @@ async def upload_failures(file: UploadFile = File(...), db: Session = Depends(ge
             created += 1
 
         db.commit()
-        return MessageResponse(
-            message=f"Загружено отказов: {created} (пропущено строк: {skipped})"
-        )
+        return MessageResponse(message=f"Загружено отказов: {created} (пропущено строк: {skipped})")
     finally:
-        try:
+        with contextlib.suppress(Exception):
             os.unlink(tmp_path)
-        except Exception:
-            pass
 
 
 @router.post("/recalc-mtbf/{model_id}", response_model=MessageResponse)
@@ -404,4 +399,3 @@ def recalc_mtbf(model_id: int, db: Session = Depends(get_db)):
 
     db.commit()
     return MessageResponse(message=f"MTBF = {mtbf_hours:.2f} ч (обновлено)")
-

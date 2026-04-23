@@ -1,15 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Any
 
 from app.database import get_db
 from app.models.models import (
-    EquipmentModel, BOMItem, APLItem,
+    APLItem,
+    BOMItem,
+    EquipmentModel,
 )
 from app.schemas.schemas import (
-    BOMItemCreate, BOMItemRead,
-    APLItemCreate, APLItemRead,
-    MessageResponse, BulkVerifyRequest,
+    APLItemCreate,
+    APLItemRead,
+    BOMItemCreate,
+    BOMItemRead,
+    BulkVerifyRequest,
+    MessageResponse,
 )
 from app.services.ai_service import yandex_ai
 
@@ -39,7 +43,7 @@ def generate_bom_from_source(model_id: int, db: Session = Depends(get_db)):
     model_name = model.normalized_name or model.original_name
     class_name = model.eq_class.name if model.eq_class else None
 
-    ai_results = yandex_ai.enrich_characteristics_via_vector_store(model_name, ["BOM спецификация"])
+    yandex_ai.enrich_characteristics_via_vector_store(model_name, ["BOM спецификация"])
     bom_data = yandex_ai.generate_bom_via_web(model_name, class_name)
 
     created = 0
@@ -73,10 +77,14 @@ def generate_bom_from_web(model_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for item in bom_data:
-        existing = db.query(BOMItem).filter(
-            BOMItem.model_id == model_id,
-            BOMItem.name == item.get("name"),
-        ).first()
+        existing = (
+            db.query(BOMItem)
+            .filter(
+                BOMItem.model_id == model_id,
+                BOMItem.name == item.get("name"),
+            )
+            .first()
+        )
         if not existing:
             bom = BOMItem(
                 model_id=model_id,
@@ -166,10 +174,14 @@ def generate_apl_from_web(model_id: int, db: Session = Depends(get_db)):
 
     created = 0
     for item in apl_data:
-        existing = db.query(APLItem).filter(
-            APLItem.model_id == model_id,
-            APLItem.name == item.get("name"),
-        ).first()
+        existing = (
+            db.query(APLItem)
+            .filter(
+                APLItem.model_id == model_id,
+                APLItem.name == item.get("name"),
+            )
+            .first()
+        )
         if not existing:
             apl = APLItem(
                 model_id=model_id,

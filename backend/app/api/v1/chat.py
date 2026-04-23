@@ -14,7 +14,6 @@ from app.models.models import (
 from app.services.ai_service import YandexAIService
 from app.services.classification import classify_model_by_classifier
 
-
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
@@ -107,12 +106,17 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
     if action == "classify_classifier":
         result = classify_model_by_classifier(model, db)
         if not result:
-            return _msg("По загруженному классификатору совпадение не найдено. Проверьте, что в классификаторе есть колонка «Модель».")
+            return _msg(
+                "По загруженному классификатору совпадение не найдено. Проверьте, что в классификаторе есть колонка «Модель»."
+            )
         db.commit()
         db.refresh(model)
         cls = model.eq_class.name if model.eq_class else "класс не определён"
         sub = model.eq_subclass.name if model.eq_subclass else "подкласс не определён"
-        return _msg(f"Классифицировано по классификатору: {_model_name(model)} → {cls} / {sub}", data={"class": cls, "subclass": sub})
+        return _msg(
+            f"Классифицировано по классификатору: {_model_name(model)} → {cls} / {sub}",
+            data={"class": cls, "subclass": sub},
+        )
 
     if action == "classify_model":
         classes = db.query(EquipmentClass).all()
@@ -123,7 +127,9 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
         ai = yandex_ai.classify_model_via_web_search_guess(_model_name(model), class_names=class_names)
         cls_name = (ai or {}).get("class_name")
         if not cls_name or str(cls_name).casefold() in {"null", "none"}:
-            return _msg("Не удалось классифицировать модель по интернету.", sources=(ai or {}).get("sources") or [])
+            return _msg(
+                "Не удалось классифицировать модель по интернету.", sources=(ai or {}).get("sources") or []
+            )
 
         from difflib import SequenceMatcher
 
@@ -136,13 +142,18 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
             if SequenceMatcher(None, norm(best.name), norm(cls_name)).ratio() >= 0.78:
                 cls = best
         if not cls:
-            return _msg(f"Класс «{cls_name}» не найден в загруженном классификаторе.", sources=(ai or {}).get("sources") or [])
+            return _msg(
+                f"Класс «{cls_name}» не найден в загруженном классификаторе.",
+                sources=(ai or {}).get("sources") or [],
+            )
 
         model.class_id = cls.id
         model.subclass_id = None
         sub_name = (ai or {}).get("subclass_name")
         if sub_name and norm(sub_name) not in {"null", "none"} and cls.subclasses:
-            best_sub = max(cls.subclasses, key=lambda s: SequenceMatcher(None, norm(s.name), norm(sub_name)).ratio())
+            best_sub = max(
+                cls.subclasses, key=lambda s: SequenceMatcher(None, norm(s.name), norm(sub_name)).ratio()
+            )
             if SequenceMatcher(None, norm(best_sub.name), norm(sub_name)).ratio() >= 0.78:
                 model.subclass_id = best_sub.id
 
@@ -154,7 +165,11 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(model)
         sub = model.eq_subclass.name if model.eq_subclass else "подкласс не определён"
-        return _msg(f"Классифицировано через интернет/ИИ: {_model_name(model)} → {cls.name} / {sub}", sources=sources, data={"class": cls.name, "subclass": sub})
+        return _msg(
+            f"Классифицировано через интернет/ИИ: {_model_name(model)} → {cls.name} / {sub}",
+            sources=sources,
+            data={"class": cls.name, "subclass": sub},
+        )
 
     if action == "required_from_docs":
         from app.api.v1.mass_processing import required_from_docs
@@ -199,7 +214,11 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
             return _msg("Сначала сформируйте узлы/компоненты ТК.")
         total = 0
         for comp in components:
-            res = fill_operations(comp.id, db) if action == "tk_operations_docs" else enrich_operations(comp.id, db)
+            res = (
+                fill_operations(comp.id, db)
+                if action == "tk_operations_docs"
+                else enrich_operations(comp.id, db)
+            )
             total += _extract_count(res.message)
         return _msg(f"Операции ТК обработаны по компонентам: {total}")
 
@@ -208,7 +227,11 @@ def chat_action(req: ChatActionRequest, db: Session = Depends(get_db)):
 
         components = db.query(TORComponent).filter(TORComponent.model_id == model.id).all()
         comp_ids = [c.id for c in components]
-        operations = db.query(ComponentOperation).filter(ComponentOperation.component_id.in_(comp_ids)).all() if comp_ids else []
+        operations = (
+            db.query(ComponentOperation).filter(ComponentOperation.component_id.in_(comp_ids)).all()
+            if comp_ids
+            else []
+        )
         if not operations:
             return _msg("Сначала сформируйте операции ТК.")
         total = 0

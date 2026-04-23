@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { NavLink } from 'react-router'
-import { Network, Layers, Cpu, Wrench, FileText, Package, Shield, MessageCircle, Database, FileSearch, ChevronLeft, ChevronRight, Menu } from 'lucide-react'
+import { NavLink, useNavigate } from 'react-router'
+import { Network, Layers, Cpu, Wrench, FileText, Package, Shield, MessageCircle, Database, FileSearch, ChevronLeft, ChevronRight, Menu, LogOut, User } from 'lucide-react'
 import { WORKSPACES } from '../../store'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useAuthStore } from '../../auth/store'
 
 const ICONS: Record<string, any> = { Network, Layers, Cpu, Wrench, FileText, Package, Shield, MessageCircle, Database, FileSearch }
 
@@ -14,6 +15,9 @@ export function Navbar() {
   const [showMore, setShowMore] = useState(false)
   const [showAllTabs, setShowAllTabs] = useState(false)
   const [isOverflowing, setIsOverflowing] = useState(false)
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const logout = useAuthStore((s) => s.logout)
 
   const workspaces = useMemo(() => WORKSPACES, [])
 
@@ -152,7 +156,12 @@ export function Navbar() {
               )}
 
               {showMore && (
-                <div className="absolute right-0 top-[calc(100%+10px)] glass-panel p-2 min-w-44 z-50">
+                <div className="absolute right-0 top-[calc(100%+10px)] glass-panel p-2 min-w-56 z-50">
+                  {user && (
+                    <div className="px-2 py-1 text-[10px] text-text-muted flex items-center gap-1">
+                      <User size={10} /> {user.full_name || user.email}
+                    </div>
+                  )}
                   <button
                     onClick={() => { setShowMore(false); handleExport1C() }}
                     className="w-full text-left px-2 py-2 rounded-lg text-xs text-text-secondary hover:bg-slate-200/60 transition-colors"
@@ -164,6 +173,13 @@ export function Navbar() {
                     className="w-full text-left px-2 py-2 rounded-lg text-xs text-text-secondary hover:bg-slate-200/60 transition-colors"
                   >
                     Экспорт в SAP
+                  </button>
+                  <div className="my-1 border-t border-slate-300/50" />
+                  <button
+                    onClick={() => { setShowMore(false); logout(); navigate('/login') }}
+                    className="w-full text-left px-2 py-2 rounded-lg text-xs text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                  >
+                    <LogOut size={12} /> Выйти
                   </button>
                 </div>
               )}

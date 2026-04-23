@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """Document parsing router - AI model card generation from uploaded files"""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from pydantic import BaseModel, Field
-from typing import Optional, Any
-import tempfile
-import os
-import logging
-from pathlib import Path
 
+import logging
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+
+from app.database import get_db
+from app.models.models import EquipmentClass, EquipmentModel, HierarchyNode
 from app.services.ai_service import yandex_ai
 from app.services.parse_jobs import create_parse_job, get_job
-from app.models.models import EquipmentModel, EquipmentClass, HierarchyNode
-from app.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/parse", tags=["parser"])
@@ -19,17 +20,19 @@ router = APIRouter(prefix="/parse", tags=["parser"])
 
 class ModelCardRequest(BaseModel):
     """Request to generate model card from parsed data"""
+
     parsed_data: dict = Field(default_factory=dict)
-    class_id: Optional[int] = None
+    class_id: int | None = None
 
 
 class ModelCardPayload(BaseModel):
     """Model card payload coming from AI / frontend edits"""
+
     original_name: str
-    normalized_name: Optional[str] = None
-    model_code: Optional[str] = None
-    class_id: Optional[int] = None
-    class_name: Optional[str] = None
+    normalized_name: str | None = None
+    model_code: str | None = None
+    class_id: int | None = None
+    class_name: str | None = None
     characteristics: list[dict] = Field(default_factory=list)
     maintenance: list[dict] = Field(default_factory=list)
     reliability: list[dict] = Field(default_factory=list)
@@ -37,16 +40,17 @@ class ModelCardPayload(BaseModel):
 
 class AddToHierarchyRequest(BaseModel):
     card: ModelCardPayload
-    parent_node_id: Optional[int] = None
+    parent_node_id: int | None = None
 
 
 class ModelCardResponse(BaseModel):
     """Generated model card from AI"""
+
     original_name: str
-    normalized_name: Optional[str]
-    model_code: Optional[str]
-    class_id: Optional[int]
-    class_name: Optional[str]
+    normalized_name: str | None
+    model_code: str | None
+    class_id: int | None
+    class_name: str | None
     characteristics: list[dict]
     maintenance: list[dict]
     reliability: list[dict]
@@ -118,7 +122,9 @@ async def generate_model_card(request: ModelCardRequest, db=Depends(get_db)):
         extracted_text = f"{text_content}\n{tables_content}".strip()
 
     if len(extracted_text.strip()) < 10:
-        raise HTTPException(status_code=400, detail="Недостаточно текста для распознавания. Попробуйте другой файл.")
+        raise HTTPException(
+            status_code=400, detail="Недостаточно текста для распознавания. Попробуйте другой файл."
+        )
 
     # Ask AI to extract model info
     prompt = f"""Извлеки из технического паспорта информацию о модели оборудования.
@@ -144,17 +150,18 @@ async def generate_model_card(request: ModelCardRequest, db=Depends(get_db)):
 
     # Parse AI response
     import json
+
     try:
         card_data = json.loads(ai_result)
-    except:
+    except (json.JSONDecodeError, TypeError):
         card_data = {"original_name": "Не удалось распознать", "error": ai_result[:200]}
 
     # Find or create class
     class_id = request.class_id
     if class_id is None and card_data.get("class_name"):
-        eq_class = db.query(EquipmentClass).filter(
-            EquipmentClass.name.ilike(f"%{card_data['class_name']}%")
-        ).first()
+        eq_class = (
+            db.query(EquipmentClass).filter(EquipmentClass.name.ilike(f"%{card_data['class_name']}%")).first()
+        )
         if eq_class:
             class_id = eq_class.id
 
@@ -204,5 +211,5 @@ async def add_model_to_hierarchy(
     return {
         "status": "success",
         "model_id": model.id,
-        "message": f"Модель '{model.original_name}' добавлена в иерархию"
+        "message": f"Модель '{model.original_name}' добавлена в иерархию",
     }

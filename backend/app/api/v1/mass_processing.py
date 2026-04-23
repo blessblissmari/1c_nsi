@@ -1,22 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session, joinedload
-from typing import Any
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import (
-    EquipmentModel, Characteristic, Unit, TORCharacteristic, EquipmentClass, EquipmentSubclass, ClassCharacteristic,
+    Characteristic,
+    ClassCharacteristic,
+    Document,
+    EquipmentClass,
+    EquipmentModel,
+    EquipmentSubclass,
+    TORCharacteristic,
+    Unit,
 )
 from app.schemas.schemas import (
-    CharacteristicCreate, CharacteristicRead,
-    UnitCreate, UnitRead,
-    TORCharacteristicCreate, TORCharacteristicRead, TORCharacteristicUpdate,
+    BulkVerifyRequest,
+    CharacteristicCreate,
+    CharacteristicRead,
     ClassCharacteristicRead,
-    MessageResponse, BulkVerifyRequest,
+    MessageResponse,
+    TORCharacteristicRead,
+    TORCharacteristicUpdate,
+    UnitCreate,
+    UnitRead,
 )
 from app.services.ai_service import yandex_ai
 from app.services.analogs import search_analogs_in_db
-from app.services.normalization import normalize_unit_value
-from app.models.models import Document
 
 router = APIRouter(prefix="/mass-processing", tags=["Окно 3 — Массовая обработка моделей"])
 
@@ -31,16 +39,22 @@ def _ensure_unit(db: Session, unit_symbol: str) -> Unit:
     return unit
 
 
-def _ensure_characteristic(db: Session, name: str, unit_symbol: str | None, class_id: int | None, subclass_id: int | None) -> Characteristic:
+def _ensure_characteristic(
+    db: Session, name: str, unit_symbol: str | None, class_id: int | None, subclass_id: int | None
+) -> Characteristic:
     unit_id = None
     if unit_symbol:
         unit_id = _ensure_unit(db, unit_symbol).id
 
-    existing = db.query(Characteristic).filter(
-        Characteristic.name == name,
-        Characteristic.class_id == class_id,
-        Characteristic.subclass_id == subclass_id,
-    ).first()
+    existing = (
+        db.query(Characteristic)
+        .filter(
+            Characteristic.name == name,
+            Characteristic.class_id == class_id,
+            Characteristic.subclass_id == subclass_id,
+        )
+        .first()
+    )
     if existing:
         if unit_id and existing.unit_id is None:
             existing.unit_id = unit_id
@@ -61,10 +75,14 @@ def _upsert_tor_value(
     confidence: float,
     source_url: str | None = None,
 ) -> None:
-    tv = db.query(TORCharacteristic).filter(
-        TORCharacteristic.model_id == model_id,
-        TORCharacteristic.characteristic_id == characteristic.id,
-    ).first()
+    tv = (
+        db.query(TORCharacteristic)
+        .filter(
+            TORCharacteristic.model_id == model_id,
+            TORCharacteristic.characteristic_id == characteristic.id,
+        )
+        .first()
+    )
     if not tv:
         tv = TORCharacteristic(model_id=model_id, characteristic_id=characteristic.id)
         db.add(tv)
@@ -85,7 +103,10 @@ def required_from_docs(model_id: int, db: Session = Depends(get_db)):
 
     required_q = db.query(ClassCharacteristic).filter(ClassCharacteristic.class_id == model.class_id)
     if model.subclass_id:
-        required_q = required_q.filter((ClassCharacteristic.subclass_id == model.subclass_id) | (ClassCharacteristic.subclass_id.is_(None)))
+        required_q = required_q.filter(
+            (ClassCharacteristic.subclass_id == model.subclass_id)
+            | (ClassCharacteristic.subclass_id.is_(None))
+        )
     required = required_q.all()
     if not required:
         raise HTTPException(400, "No required characteristics for class/subclass")
@@ -124,14 +145,19 @@ def required_from_web(model_id: int, db: Session = Depends(get_db)):
 
     required_q = db.query(ClassCharacteristic).filter(ClassCharacteristic.class_id == model.class_id)
     if model.subclass_id:
-        required_q = required_q.filter((ClassCharacteristic.subclass_id == model.subclass_id) | (ClassCharacteristic.subclass_id.is_(None)))
+        required_q = required_q.filter(
+            (ClassCharacteristic.subclass_id == model.subclass_id)
+            | (ClassCharacteristic.subclass_id.is_(None))
+        )
     required = required_q.all()
     if not required:
         raise HTTPException(400, "No required characteristics for class/subclass")
 
     cls = db.query(EquipmentClass).get(model.class_id)
     names = [r.name for r in required]
-    enriched = yandex_ai.enrich_characteristics_via_web(model.normalized_name or model.original_name, cls.name if cls else None, names)
+    enriched = yandex_ai.enrich_characteristics_via_web(
+        model.normalized_name or model.original_name, cls.name if cls else None, names
+    )
 
     filled = 0
     for item in enriched:
@@ -142,7 +168,9 @@ def required_from_web(model_id: int, db: Session = Depends(get_db)):
         expected = next((r for r in required if r.name == ch_name), None)
         unit_symbol = item.get("unit") or (expected.unit_symbol if expected else None)
         ch = _ensure_characteristic(db, ch_name, unit_symbol, model.class_id, model.subclass_id)
-        _upsert_tor_value(db, model.id, ch, val, "yandex_web", float(item.get("confidence") or 0.7), item.get("source_url"))
+        _upsert_tor_value(
+            db, model.id, ch, val, "yandex_web", float(item.get("confidence") or 0.7), item.get("source_url")
+        )
         filled += 1
 
     db.commit()
@@ -164,10 +192,15 @@ def other_from_docs(model_id: int, db: Session = Depends(get_db)):
     if model.class_id:
         required_q = db.query(ClassCharacteristic).filter(ClassCharacteristic.class_id == model.class_id)
         if model.subclass_id:
-            required_q = required_q.filter((ClassCharacteristic.subclass_id == model.subclass_id) | (ClassCharacteristic.subclass_id.is_(None)))
+            required_q = required_q.filter(
+                (ClassCharacteristic.subclass_id == model.subclass_id)
+                | (ClassCharacteristic.subclass_id.is_(None))
+            )
         required_names = [r.name for r in required_q.all()]
 
-    extracted = yandex_ai.extract_other_characteristics_from_text(text, exclude_names=required_names, limit=20)
+    extracted = yandex_ai.extract_other_characteristics_from_text(
+        text, exclude_names=required_names, limit=20
+    )
     filled = 0
     for item in extracted:
         ch_name = str(item.get("characteristic_name") or "").strip()
@@ -185,14 +218,17 @@ def other_from_docs(model_id: int, db: Session = Depends(get_db)):
 
 @router.get("/class-characteristics", response_model=list[ClassCharacteristicRead])
 def get_class_characteristics(
-    class_id: int | None = None, subclass_id: int | None = None,
+    class_id: int | None = None,
+    subclass_id: int | None = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(ClassCharacteristic)
     if class_id:
         q = q.filter(ClassCharacteristic.class_id == class_id)
     if subclass_id is not None:
-        q = q.filter((ClassCharacteristic.subclass_id == subclass_id) | (ClassCharacteristic.subclass_id.is_(None)))
+        q = q.filter(
+            (ClassCharacteristic.subclass_id == subclass_id) | (ClassCharacteristic.subclass_id.is_(None))
+        )
     return q.all()
 
 
@@ -202,7 +238,9 @@ async def upload_class_characteristics(file: UploadFile = File(...), db: Session
     Upload class/subclass -> characteristics catalog from xlsx like:
     columns: Класс, Подкласс, Характеристика N, Ед.измерения N ...
     """
-    import tempfile, os
+    import os
+    import tempfile
+
     import openpyxl
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
@@ -260,10 +298,14 @@ async def upload_class_characteristics(file: UploadFile = File(...), db: Session
 
             subclass_id = None
             if sub_name and str(sub_name).strip():
-                sub = db.query(EquipmentSubclass).filter(
-                    EquipmentSubclass.class_id == cls.id,
-                    EquipmentSubclass.name == str(sub_name).strip(),
-                ).first()
+                sub = (
+                    db.query(EquipmentSubclass)
+                    .filter(
+                        EquipmentSubclass.class_id == cls.id,
+                        EquipmentSubclass.name == str(sub_name).strip(),
+                    )
+                    .first()
+                )
                 if sub:
                     subclass_id = sub.id
 
@@ -285,54 +327,64 @@ async def upload_class_characteristics(file: UploadFile = File(...), db: Session
 
                 required = is_blue_fill(ch_cell)
 
-                existing = db.query(ClassCharacteristic).filter(
-                    ClassCharacteristic.class_id == cls.id,
-                    ClassCharacteristic.subclass_id == subclass_id,
-                    ClassCharacteristic.name == ch_name,
-                ).first()
+                existing = (
+                    db.query(ClassCharacteristic)
+                    .filter(
+                        ClassCharacteristic.class_id == cls.id,
+                        ClassCharacteristic.subclass_id == subclass_id,
+                        ClassCharacteristic.name == ch_name,
+                    )
+                    .first()
+                )
                 if existing:
                     if existing.unit_symbol != unit_symbol or existing.required != required:
                         existing.unit_symbol = unit_symbol
                         existing.required = required
                         updated += 1
                 else:
-                    db.add(ClassCharacteristic(
-                        class_id=cls.id,
-                        subclass_id=subclass_id,
-                        name=ch_name,
-                        unit_symbol=unit_symbol,
-                        required=required,
-                    ))
+                    db.add(
+                        ClassCharacteristic(
+                            class_id=cls.id,
+                            subclass_id=subclass_id,
+                            name=ch_name,
+                            unit_symbol=unit_symbol,
+                            required=required,
+                        )
+                    )
                     created += 1
 
         db.commit()
-        return MessageResponse(message=f"Загружено характеристик: {created} (обновлено: {updated}, пропущено строк: {skipped})")
+        return MessageResponse(
+            message=f"Загружено характеристик: {created} (обновлено: {updated}, пропущено строк: {skipped})"
+        )
     finally:
         os.unlink(tmp_path)
 
 
 @router.get("/characteristics", response_model=list[CharacteristicRead])
 def get_characteristics(
-    class_id: int | None = None, subclass_id: int | None = None,
+    class_id: int | None = None,
+    subclass_id: int | None = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(Characteristic)
     if class_id:
-        q = q.filter(
-            (Characteristic.class_id == class_id) | (Characteristic.class_id.is_(None))
-        )
+        q = q.filter((Characteristic.class_id == class_id) | (Characteristic.class_id.is_(None)))
     if subclass_id:
-        q = q.filter(
-            (Characteristic.subclass_id == subclass_id) | (Characteristic.subclass_id.is_(None))
-        )
+        q = q.filter((Characteristic.subclass_id == subclass_id) | (Characteristic.subclass_id.is_(None)))
     chars = q.all()
     result = []
     for c in chars:
-        result.append(CharacteristicRead(
-            id=c.id, name=c.name, unit_id=c.unit_id,
-            class_id=c.class_id, subclass_id=c.subclass_id,
-            unit_symbol=c.unit.symbol if c.unit else None,
-        ))
+        result.append(
+            CharacteristicRead(
+                id=c.id,
+                name=c.name,
+                unit_id=c.unit_id,
+                class_id=c.class_id,
+                subclass_id=c.subclass_id,
+                unit_symbol=c.unit.symbol if c.unit else None,
+            )
+        )
     return result
 
 
@@ -343,16 +395,21 @@ def create_characteristic(data: CharacteristicCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(char)
     return CharacteristicRead(
-        id=char.id, name=char.name, unit_id=char.unit_id,
-        class_id=char.class_id, subclass_id=char.subclass_id,
+        id=char.id,
+        name=char.name,
+        unit_id=char.unit_id,
+        class_id=char.class_id,
+        subclass_id=char.subclass_id,
         unit_symbol=char.unit.symbol if char.unit else None,
     )
 
 
 @router.post("/upload-characteristics", response_model=MessageResponse)
 async def upload_characteristics(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -365,8 +422,15 @@ async def upload_characteristics(file: UploadFile = File(...), db: Session = Dep
         created_units = 0
 
         for row in rows:
-            name = row.get("Характеристика") or row.get("Наименование") or row.get("characteristic") or row.get("name")
-            unit_name = row.get("Ед.изм.") or row.get("Единица") or row.get("unit") or row.get("Ед. измерения")
+            name = (
+                row.get("Характеристика")
+                or row.get("Наименование")
+                or row.get("characteristic")
+                or row.get("name")
+            )
+            unit_name = (
+                row.get("Ед.изм.") or row.get("Единица") or row.get("unit") or row.get("Ед. измерения")
+            )
             unit_symbol = row.get("Обозначение") or row.get("symbol") or row.get("Символ")
             class_name = row.get("Класс") or row.get("class")
             subclass_name = row.get("Подкласс") or row.get("subclass")
@@ -394,21 +458,31 @@ async def upload_characteristics(file: UploadFile = File(...), db: Session = Dep
                 if cls:
                     class_id = cls.id
                     if subclass_name:
-                        sub = db.query(EquipmentSubclass).filter(
-                            EquipmentSubclass.name == str(subclass_name),
-                            EquipmentSubclass.class_id == cls.id,
-                        ).first()
+                        sub = (
+                            db.query(EquipmentSubclass)
+                            .filter(
+                                EquipmentSubclass.name == str(subclass_name),
+                                EquipmentSubclass.class_id == cls.id,
+                            )
+                            .first()
+                        )
                         if sub:
                             subclass_id = sub.id
 
-            existing = db.query(Characteristic).filter(
-                Characteristic.name == str(name),
-                Characteristic.class_id == class_id,
-            ).first()
+            existing = (
+                db.query(Characteristic)
+                .filter(
+                    Characteristic.name == str(name),
+                    Characteristic.class_id == class_id,
+                )
+                .first()
+            )
             if not existing:
                 char = Characteristic(
-                    name=str(name), unit_id=unit_id,
-                    class_id=class_id, subclass_id=subclass_id,
+                    name=str(name),
+                    unit_id=unit_id,
+                    class_id=class_id,
+                    subclass_id=subclass_id,
                 )
                 db.add(char)
                 created_chars += 1
@@ -435,8 +509,10 @@ def create_unit(data: UnitCreate, db: Session = Depends(get_db)):
 
 @router.post("/upload-units", response_model=MessageResponse)
 async def upload_units(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    import os
+    import tempfile
+
     from app.services.file_parser import parse_xlsx
-    import tempfile, os
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
         content = await file.read()
@@ -471,16 +547,22 @@ def bind_characteristics_to_tor(model_id: int, db: Session = Depends(get_db)):
     if not model:
         raise HTTPException(404, "Model not found")
 
-    chars = db.query(Characteristic).filter(
-        (Characteristic.class_id == model.class_id) | (Characteristic.class_id.is_(None))
-    ).all()
+    chars = (
+        db.query(Characteristic)
+        .filter((Characteristic.class_id == model.class_id) | (Characteristic.class_id.is_(None)))
+        .all()
+    )
 
     bound = 0
     for char in chars:
-        existing = db.query(TORCharacteristic).filter(
-            TORCharacteristic.model_id == model_id,
-            TORCharacteristic.characteristic_id == char.id,
-        ).first()
+        existing = (
+            db.query(TORCharacteristic)
+            .filter(
+                TORCharacteristic.model_id == model_id,
+                TORCharacteristic.characteristic_id == char.id,
+            )
+            .first()
+        )
         if not existing:
             tor_char = TORCharacteristic(model_id=model_id, characteristic_id=char.id)
             db.add(tor_char)
@@ -495,15 +577,22 @@ def get_tor_characteristics(model_id: int, db: Session = Depends(get_db)):
     items = db.query(TORCharacteristic).filter(TORCharacteristic.model_id == model_id).all()
     result = []
     for item in items:
-        result.append(TORCharacteristicRead(
-            id=item.id, model_id=item.model_id,
-            characteristic_id=item.characteristic_id,
-            value=item.value, source_type=item.source_type,
-            confidence=item.confidence, source_url=item.source_url,
-            verified=item.verified,
-            characteristic_name=item.characteristic.name if item.characteristic else None,
-            unit_symbol=item.characteristic.unit.symbol if item.characteristic and item.characteristic.unit else None,
-        ))
+        result.append(
+            TORCharacteristicRead(
+                id=item.id,
+                model_id=item.model_id,
+                characteristic_id=item.characteristic_id,
+                value=item.value,
+                source_type=item.source_type,
+                confidence=item.confidence,
+                source_url=item.source_url,
+                verified=item.verified,
+                characteristic_name=item.characteristic.name if item.characteristic else None,
+                unit_symbol=item.characteristic.unit.symbol
+                if item.characteristic and item.characteristic.unit
+                else None,
+            )
+        )
     return result
 
 
@@ -525,10 +614,14 @@ def fill_characteristics_from_source(model_id: int, db: Session = Depends(get_db
     if not model:
         raise HTTPException(404, "Model not found")
 
-    tor_chars = db.query(TORCharacteristic).filter(
-        TORCharacteristic.model_id == model_id,
-        TORCharacteristic.value.is_(None),
-    ).all()
+    tor_chars = (
+        db.query(TORCharacteristic)
+        .filter(
+            TORCharacteristic.model_id == model_id,
+            TORCharacteristic.value.is_(None),
+        )
+        .all()
+    )
 
     if not tor_chars:
         return MessageResponse(message="No empty characteristics to fill")
@@ -560,10 +653,14 @@ def enrich_characteristics_from_web(model_id: int, db: Session = Depends(get_db)
     if not model:
         raise HTTPException(404, "Model not found")
 
-    tor_chars = db.query(TORCharacteristic).filter(
-        TORCharacteristic.model_id == model_id,
-        TORCharacteristic.value.is_(None),
-    ).all()
+    tor_chars = (
+        db.query(TORCharacteristic)
+        .filter(
+            TORCharacteristic.model_id == model_id,
+            TORCharacteristic.value.is_(None),
+        )
+        .all()
+    )
 
     if not tor_chars:
         return MessageResponse(message="No empty characteristics to enrich")
@@ -599,16 +696,16 @@ def search_analogs(model_id: int, selected_chars: list[int] | None = None, db: S
 
     characteristics = None
     if selected_chars:
-        tor_chars = db.query(TORCharacteristic).filter(
-            TORCharacteristic.model_id == model_id,
-            TORCharacteristic.characteristic_id.in_(selected_chars),
-            TORCharacteristic.value.isnot(None),
-        ).all()
-        characteristics = {
-            tc.characteristic.name: tc.value
-            for tc in tor_chars
-            if tc.characteristic
-        }
+        tor_chars = (
+            db.query(TORCharacteristic)
+            .filter(
+                TORCharacteristic.model_id == model_id,
+                TORCharacteristic.characteristic_id.in_(selected_chars),
+                TORCharacteristic.value.isnot(None),
+            )
+            .all()
+        )
+        characteristics = {tc.characteristic.name: tc.value for tc in tor_chars if tc.characteristic}
 
     # Per TЗ "Оценка качества данных": do not invent analogs. Return only DB-backed results.
     return search_analogs_in_db(db=db, base_model=model, characteristics=characteristics)

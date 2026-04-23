@@ -1,5 +1,58 @@
-backend/venv/
-venv/
+# --- Python ---
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# --- Virtualenvs ---
+venv/
+.venv/
+env/
+backend/venv/
+backend/.venv/
+
+# --- Environments / secrets ---
 .env
+.env.*
+!.env.example
+
+# --- SQLite runtime files ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# --- Logs ---
+*.log
+
+# --- Runtime uploads ---
+backend/app/uploads/
+backend/uploads/
+uploads/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# --- Editor / OS ---
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Seed data artifacts (large, regenerated) ---
+TEST_MODEL.pdf
+
+# --- Thoughts / personal workspace (committed selectively) ---
+thoughts/shared/ledgers/

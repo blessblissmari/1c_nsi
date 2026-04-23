@@ -34,7 +34,9 @@ class YandexAIService:
             try:
                 from yandex_ai_studio_sdk._tools.generative_search import GenerativeSearchTool
 
-                gen_tool = GenerativeSearchTool(description="Search the web for industrial equipment information")
+                gen_tool = GenerativeSearchTool(
+                    description="Search the web for industrial equipment information"
+                )
                 assistant = self.sdk.assistants.create(
                     name="nsi_web_search",
                     model="yandexgpt-lite",
@@ -54,12 +56,12 @@ class YandexAIService:
         result = self._call_http(prompt, temperature)
         if result:
             return result
-        
+
         # Fallback to lite model
         result = self._call_lite(prompt, temperature)
         if result:
             return result
-            
+
         logger.warning("All AI methods failed, returning None")
         return None
 
@@ -68,9 +70,7 @@ class YandexAIService:
 
         try:
             payload = {
-                # Yandex endpoints differ slightly in naming; send both keys for compatibility.
                 "model": self._model_uri,
-                "modelUri": self._model_uri,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -132,7 +132,7 @@ class YandexAIService:
                 end = text.rfind(end_ch)
                 if start != -1 and end != -1:
                     try:
-                        return json.loads(text[start:end + 1])
+                        return json.loads(text[start : end + 1])
                     except json.JSONDecodeError:
                         pass
             logger.warning(f"Failed to parse JSON from AI response: {text[:200]}")
@@ -231,7 +231,9 @@ class YandexAIService:
             'Ответь строго JSON: {"class": "<строка или null>", "subclass": "<строка или null>"}'
         )
 
-        text = self._call_http(prompt, temperature=0.0, max_tokens=500) or self._call_lite(prompt, temperature=0.0, max_tokens=500)
+        text = self._call_http(prompt, temperature=0.0, max_tokens=500) or self._call_lite(
+            prompt, temperature=0.0, max_tokens=500
+        )
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, dict):
             return {
@@ -243,7 +245,9 @@ class YandexAIService:
             }
         return None
 
-    def classify_model_via_web_search_guess(self, model_name: str, class_names: list[str] | None = None) -> dict | None:
+    def classify_model_via_web_search_guess(
+        self, model_name: str, class_names: list[str] | None = None
+    ) -> dict | None:
         """
         Web search -> LLM guess (NOT constrained to classifier).
         The API endpoint maps this guess into the uploaded classifier via fuzzy match.
@@ -278,7 +282,9 @@ class YandexAIService:
             'Ответь строго JSON: {"class": "<класс или null>", "subclass": "<подкласс или null>"}'
         )
 
-        text = self._call_http(prompt, temperature=0.0, max_tokens=400) or self._call_lite(prompt, temperature=0.0, max_tokens=400)
+        text = self._call_http(prompt, temperature=0.0, max_tokens=400) or self._call_lite(
+            prompt, temperature=0.0, max_tokens=400
+        )
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, dict):
             return {
@@ -332,7 +338,9 @@ class YandexAIService:
             }
         return None
 
-    def enrich_characteristics_via_web(self, model_name: str, class_name: str | None, characteristic_names: list[str]) -> list[dict]:
+    def enrich_characteristics_via_web(
+        self, model_name: str, class_name: str | None, characteristic_names: list[str]
+    ) -> list[dict]:
         char_list = ", ".join(characteristic_names)
         prompt = (
             f"Для промышленного оборудования модели '{model_name}'"
@@ -347,13 +355,17 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "characteristic_name": item.get("characteristic"),
-                "value": item.get("value"),
-                "unit": item.get("unit"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("value")]
+            return [
+                {
+                    "characteristic_name": item.get("characteristic"),
+                    "value": item.get("value"),
+                    "unit": item.get("unit"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("value")
+            ]
         return []
 
     def extract_characteristics_from_text(
@@ -377,7 +389,9 @@ class YandexAIService:
             "Если значение не найдено — не добавляй элемент.\n"
             + ("Единицы измерения указывай по ГОСТ 8.417 (русские обозначения).\n" if require_units else "")
         )
-        text = self._call_http(prompt, temperature=0.0, max_tokens=800) or self._call_lite(prompt, temperature=0.0, max_tokens=800)
+        text = self._call_http(prompt, temperature=0.0, max_tokens=800) or self._call_lite(
+            prompt, temperature=0.0, max_tokens=800
+        )
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
             out = []
@@ -387,13 +401,15 @@ class YandexAIService:
                 val = item.get("value")
                 if val is None or str(val).strip() == "":
                     continue
-                out.append({
-                    "characteristic_name": item.get("characteristic"),
-                    "value": str(val),
-                    "unit": item.get("unit"),
-                    "source": "vector_store",
-                    "confidence": 0.85,
-                })
+                out.append(
+                    {
+                        "characteristic_name": item.get("characteristic"),
+                        "value": str(val),
+                        "unit": item.get("unit"),
+                        "source": "vector_store",
+                        "confidence": 0.85,
+                    }
+                )
             return out
         return []
 
@@ -407,7 +423,7 @@ class YandexAIService:
         Extract other (non-required) characteristics from document text.
         Returns list of {"characteristic_name","value","unit","source","confidence"}.
         """
-        exclude = set([str(n).strip() for n in (exclude_names or []) if str(n).strip()])
+        exclude = {str(n).strip() for n in (exclude_names or []) if str(n).strip()}
         prompt = (
             "Извлеки из текста документа прочие технические характеристики оборудования (не менее 10, если есть).\n"
             "Требования:\n"
@@ -421,7 +437,9 @@ class YandexAIService:
             '[{"characteristic":"название","value":"значение","unit":"ед.изм. или null"}]\n'
             f"Ограничься максимум {int(limit)} элементами."
         )
-        text = self._call_http(prompt, temperature=0.0, max_tokens=1200) or self._call_lite(prompt, temperature=0.0, max_tokens=1200)
+        text = self._call_http(prompt, temperature=0.0, max_tokens=1200) or self._call_lite(
+            prompt, temperature=0.0, max_tokens=1200
+        )
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
             out = []
@@ -434,17 +452,21 @@ class YandexAIService:
                     continue
                 if ch in exclude:
                     continue
-                out.append({
-                    "characteristic_name": ch,
-                    "value": val,
-                    "unit": item.get("unit"),
-                    "source": "vector_store",
-                    "confidence": 0.75,
-                })
+                out.append(
+                    {
+                        "characteristic_name": ch,
+                        "value": val,
+                        "unit": item.get("unit"),
+                        "source": "vector_store",
+                        "confidence": 0.75,
+                    }
+                )
             return out[:limit]
         return []
 
-    def enrich_characteristics_via_vector_store(self, model_name: str, characteristic_names: list[str]) -> list[dict]:
+    def enrich_characteristics_via_vector_store(
+        self, model_name: str, characteristic_names: list[str]
+    ) -> list[dict]:
         char_list = ", ".join(characteristic_names)
         prompt = (
             f"Найди в технической документации для модели '{model_name}' "
@@ -459,13 +481,17 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "characteristic_name": item.get("characteristic"),
-                "value": item.get("value"),
-                "unit": item.get("unit"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("value")]
+            return [
+                {
+                    "characteristic_name": item.get("characteristic"),
+                    "value": item.get("value"),
+                    "unit": item.get("unit"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("value")
+            ]
         return []
 
     def enrich_maintenance_via_web(self, model_name: str, class_name: str | None) -> list[dict]:
@@ -481,12 +507,16 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "periodicity_months": item.get("periodicity_months"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "periodicity_months": item.get("periodicity_months"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_maintenance_via_vector_store(self, model_name: str) -> list[dict]:
@@ -502,12 +532,16 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "periodicity_months": item.get("periodicity_months"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "periodicity_months": item.get("periodicity_months"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def search_analogs(self, model_name: str, characteristics: dict[str, str] | None = None) -> list[dict]:
@@ -525,13 +559,16 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.3)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "model": item.get("model"),
-                "manufacturer": item.get("manufacturer"),
-                "match_score": item.get("match_score", 0.5),
-                "differences": item.get("differences"),
-                "source": "yandex_web",
-            } for item in parsed]
+            return [
+                {
+                    "model": item.get("model"),
+                    "manufacturer": item.get("manufacturer"),
+                    "match_score": item.get("match_score", 0.5),
+                    "differences": item.get("differences"),
+                    "source": "yandex_web",
+                }
+                for item in parsed
+            ]
         return []
 
     def generate_bom_via_web(self, model_name: str, class_name: str | None) -> list[dict]:
@@ -546,14 +583,17 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.3)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "code": item.get("code"),
-                "quantity": item.get("quantity"),
-                "unit_symbol": item.get("unit"),
-                "source": "yandex_web",
-                "confidence": 0.6,
-            } for item in parsed]
+            return [
+                {
+                    "name": item.get("name"),
+                    "code": item.get("code"),
+                    "quantity": item.get("quantity"),
+                    "unit_symbol": item.get("unit"),
+                    "source": "yandex_web",
+                    "confidence": 0.6,
+                }
+                for item in parsed
+            ]
         return []
 
     def generate_apl_via_web(self, model_name: str, class_name: str | None) -> list[dict]:
@@ -570,14 +610,17 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.3)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "code": item.get("code"),
-                "quantity": item.get("quantity"),
-                "unit_symbol": item.get("unit"),
-                "source": "yandex_web",
-                "confidence": 0.6,
-            } for item in parsed]
+            return [
+                {
+                    "name": item.get("name"),
+                    "code": item.get("code"),
+                    "quantity": item.get("quantity"),
+                    "unit_symbol": item.get("unit"),
+                    "source": "yandex_web",
+                    "confidence": 0.6,
+                }
+                for item in parsed
+            ]
         return []
 
     def enrich_components_via_web(self, model_name: str, class_name: str | None) -> list[dict]:
@@ -594,12 +637,16 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "component_type": item.get("component_type", "узел"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "component_type": item.get("component_type", "узел"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_components_via_vector_store(self, model_name: str) -> list[dict]:
@@ -615,12 +662,16 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "component_type": item.get("component_type", "узел"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "component_type": item.get("component_type", "узел"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_operations_via_web(self, component_name: str, class_name: str | None) -> list[dict]:
@@ -637,14 +688,18 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "profession": item.get("profession"),
-                "qualification": item.get("qualification"),
-                "labor_hours": item.get("labor_hours"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "profession": item.get("profession"),
+                    "qualification": item.get("qualification"),
+                    "labor_hours": item.get("labor_hours"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_operations_via_vector_store(self, component_name: str) -> list[dict]:
@@ -661,14 +716,18 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "profession": item.get("profession"),
-                "qualification": item.get("qualification"),
-                "labor_hours": item.get("labor_hours"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "profession": item.get("profession"),
+                    "qualification": item.get("qualification"),
+                    "labor_hours": item.get("labor_hours"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_tmc_via_web(self, operation_name: str) -> list[dict]:
@@ -684,15 +743,19 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "code": item.get("code"),
-                "unit_symbol": item.get("unit"),
-                "quantity": item.get("quantity"),
-                "consumption_rate": item.get("consumption_rate"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "code": item.get("code"),
+                    "unit_symbol": item.get("unit"),
+                    "quantity": item.get("quantity"),
+                    "consumption_rate": item.get("consumption_rate"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_tmc_via_vector_store(self, operation_name: str) -> list[dict]:
@@ -709,15 +772,19 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "name": item.get("name"),
-                "code": item.get("code"),
-                "unit_symbol": item.get("unit"),
-                "quantity": item.get("quantity"),
-                "consumption_rate": item.get("consumption_rate"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("name")]
+            return [
+                {
+                    "name": item.get("name"),
+                    "code": item.get("code"),
+                    "unit_symbol": item.get("unit"),
+                    "quantity": item.get("quantity"),
+                    "consumption_rate": item.get("consumption_rate"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("name")
+            ]
         return []
 
     def enrich_reliability_via_web(self, model_name: str, class_name: str | None) -> list[dict]:
@@ -735,14 +802,18 @@ class YandexAIService:
         text = self._call_with_web_search(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "metric_type": item.get("metric_type"),
-                "value": item.get("value"),
-                "unit": item.get("unit"),
-                "description": item.get("description"),
-                "source": "yandex_web",
-                "confidence": 0.7,
-            } for item in parsed if item.get("metric_type")]
+            return [
+                {
+                    "metric_type": item.get("metric_type"),
+                    "value": item.get("value"),
+                    "unit": item.get("unit"),
+                    "description": item.get("description"),
+                    "source": "yandex_web",
+                    "confidence": 0.7,
+                }
+                for item in parsed
+                if item.get("metric_type")
+            ]
         return []
 
     def enrich_reliability_via_vector_store(self, model_name: str) -> list[dict]:
@@ -760,14 +831,18 @@ class YandexAIService:
             text = self._call_http(prompt, temperature=0.2) or self._call_lite(prompt, temperature=0.2)
         parsed = self._parse_json(text)
         if parsed and isinstance(parsed, list):
-            return [{
-                "metric_type": item.get("metric_type"),
-                "value": item.get("value"),
-                "unit": item.get("unit"),
-                "description": item.get("description"),
-                "source": "vector_store",
-                "confidence": 0.85,
-            } for item in parsed if item.get("metric_type")]
+            return [
+                {
+                    "metric_type": item.get("metric_type"),
+                    "value": item.get("value"),
+                    "unit": item.get("unit"),
+                    "description": item.get("description"),
+                    "source": "vector_store",
+                    "confidence": 0.85,
+                }
+                for item in parsed
+                if item.get("metric_type")
+            ]
         return []
 
 
