@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router'
+import { BrowserRouter, HashRouter, Routes, Route } from 'react-router'
 import { AppLayout } from './components/layout/AppLayout'
 import { HierarchyWorkspace } from './components/workspaces/HierarchyWorkspace'
 import { UpperLevelsWorkspace } from './components/workspaces/UpperLevelsWorkspace'
@@ -13,9 +13,13 @@ import { LoginPage } from './auth/LoginPage'
 import { RegisterPage } from './auth/RegisterPage'
 import { RequireAuth } from './auth/RequireAuth'
 
+// GitHub Pages / другой статический хостинг не умеет обрабатывать deep links,
+// поэтому переключаемся на HashRouter, если сборка предназначена для Pages.
+const Router = import.meta.env.VITE_USE_HASH_ROUTER === 'true' ? HashRouter : BrowserRouter
+
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -38,6 +42,6 @@ export default function App() {
           <Route path="/parser" element={<ParserWorkspace />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </Router>
   )
 }
