@@ -122,7 +122,8 @@ class YandexAIService:
         """Chat completion через OpenAI-совместимый endpoint."""
         import httpx
 
-        if not settings.OPENAI_API_KEY:
+        api_key = (settings.OPENAI_API_KEY or "").strip()
+        if not api_key:
             logger.error("OPENAI_API_KEY не задан")
             return None
 
@@ -136,7 +137,7 @@ class YandexAIService:
             resp = httpx.post(
                 f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
