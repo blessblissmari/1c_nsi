@@ -1,0 +1,2 @@
+INFO:     127.0.0.1:58148 - "POST /api/v1/mass-processing/required-from-docs/1 HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:58149 - "POST /api/v1/mass-processing/other-from-docs/1 HTTP/1.1" 400 Bad Request

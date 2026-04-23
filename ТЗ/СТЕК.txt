@@ -1,0 +1,354 @@
+Использовать для разработки
+https://aistudio.yandex.ru/docs/ru/ai-studio/sdk/index.html
+pip install yandex-ai-studio-sdk
+
+Часть документации.
+Аутентификация в Yandex AI Studio SDK
+Использование поискового индекса
+
+Использование поисковых индексов позволяет реализовать сценарий генеративного ответа с учетом информации из внешних источников (RAG, Retrieval Augmented Generation), при котором модель генерации текста будет готовить ответ с учетом найденной в поисковом индексе информации.
+
+Поисковый индекс Vector Store можно подключить к голосовому или текстовому агенту при помощи инструмента File Search.
+
+По умолчанию поиск в Vector Store работает в гибридном режиме:
+
+    Векторный поиск по эмбеддингам ищет близкие по смыслу формулировки, может обрабатывать синонимы и контекст запроса.
+    Лексический поиск находит точные совпадения слов, артикулов, имен и аббревиатур.
+
+Гибридный подход сочетает преимущества обоих методов. Он обеспечивает стабильную релевантность для запросов любой длины — от коротких точных до развернутых и неточных.
+
+Результатом поиска по векторному индексу Vector Store являются:
+
+    Список релевантных текстовых фрагментов.
+
+    Поиск в индексе Vector Store (similarity search) возвращает список из заданного количества ближайших по смыслу векторов (метод Top-k).
+
+    Оценка релевантности по отношению к запросу для каждого из возвращаемых фрагментов списка.
+
+    Метаданные фрагментов.
+
+    К результатам поиска можно применять фильтры по метаданным. Метаданные поисковых индексов представляют собой объекты, содержащие пары <ключ>:<значение>, и могут расширять контекст поиска дополнительными сведени
+
+    Коннекторы для создания поисковых индексов Vector Store
+
+Вы можете создавать поисковые индексы Vector Store на основе файлов из различных источников. Для этого Yandex AI Studio SDK предлагает консольную утилиту Vector Store CLI, которая поддерживает следующие источники данных:
+
+    локальная файловая система;
+    Atlassian Confluence;
+    Yandex Object Storage и другие S3-совместимые хранилища;
+    системы на движке MediaWiki.
+
+Установка
+
+Установите базовый пакет и дополнительные функции в зависимости от источников данных, с которыми планируете работать:
+
+# Базовая установка с поддержкой локальных файлов и Atlassian Confluence
+pip install yandex-ai-studio-sdk
+
+# С поддержкой Amazon S3 и Object Storage
+pip install "yandex-ai-studio-sdk[cli-s3]"
+
+# С поддержкой MediaWiki
+pip install "yandex-ai-studio-sdk[cli-wiki]"
+
+# Все дополнительные функции
+pip install "yandex-ai-studio-sdk[cli-wiki,cli-s3]"
+
+Аутентификация
+
+Vector Store CLI поддерживает следующие методы аутентификации:
+
+    Флаг --auth и IAM-токен или API-ключ. Флаг не требуется, если пользователь аутентифицировался другим методом.
+
+    Примечание
+
+    Если указаны оба вида токена, YC_API_KEY имеет приоритет над YC_IAM_TOKEN.
+
+    Если у вас установлен и настроен Yandex Cloud CLI, инструмент автоматически использует его конфигурацию.
+
+    При работе на ВМ Compute Cloud инструмент может использовать метаданные ВМ для автоматической аутентификации.
+
+Использование
+
+Работать с Vector Store CLI можно с помощью команд следующего вида:
+
+yandex-ai-studio vector-stores <тип_источника_данных> [<параметры>] [<путь_к_данным>]
+
+Где:
+
+    <тип_источника_данных> — название источника данных. Возможные значения:
+        local — локальная файловая система;
+        confluence — Atlassian Confluence;
+        s3 — Object Storage и другие S3-совместимые хранилища;
+        wiki — системы на движке MediaWiki.
+
+    <параметры> — данные аутентификации и дополнительные параметры индексации.
+
+    <путь_к_данным> — путь к данным для индексации.
+
+Особенности работы с утилитой различаются в зависимости от источника данных:
+
+Источник данных local не поддерживает работу с папками. Используйте полные пути до файлов или ShellGlobbing. Например, *.txt — все файлы с расширением .txt.
+
+Параметры
+Параметр 	Описание
+--max-file-size INT 	Пропускать файлы больше указанного размера в байтах
+
+Примеры использования
+
+# Индексация одного файла
+yandex-ai-studio vector-stores local report.pdf
+
+# Индексация нескольких файлов
+yandex-ai-studio vector-stores local docs/intro.txt docs/guide.md
+
+# Использование ShellGlobbing для включения всех .txt и .md файлов
+yandex-ai-studio vector-stores local sample_docs/*.txt sample_docs/*.md
+
+    image
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Общие параметры
+
+Общие параметры доступны для всех типов хранилищ.
+Подключение
+Параметр 	Переменная окружения 	Описание
+--folder-id TEXT 	YC_FOLDER_ID 	Идентификатор каталога Yandex Cloud. Обязательный параметр
+--auth TEXT 	YC_API_KEY или YC_IAM_TOKEN 	Токен аутентификации
+--endpoint URL 	— 	Переопределение стандартного API-эндпоинта
+Настройки индекса
+Опция 	По умолчанию 	Описание
+--name TEXT 	— 	Имя создаваемого поискового индекса
+--metadata KEY=VALUE 	— 	Добавить метаданные. До 16 пар в формате ключ=значение
+--expires-after-days INT 	— 	Время жизни индекса в днях
+--expires-after-anchor TEXT 	— 	Точка отсчета для начала жизни индекса. Возможные значения:
+created_at — с момента создания
+last_active_at — с момента последней активности
+--max-chunk-size-tokens INT 	800 	Максимальное количество токенов на текстовую ячейку
+--chunk-overlap-tokens INT 	400 	Количество дублирующихся токенов между соседними ячейками
+--poll-timeout INT 	3600 	Максимальное время ожидания создания индекса в секундах
+Настройки загрузки
+Опция 	По умолчанию 	Описание
+--max-concurrent-uploads INT 	4 	Максимальное количество параллельных загрузок файлов
+--skip-on-error 	false 	Продолжать обработку при ошибке загрузки файла
+--file-expires-after-seconds INT 	— 	Время жизни загруженных файлов в секундах
+--file-expires-after-anchor TEXT 	— 	Точка отсчета для начала жизни файла. Возможные значения:
+created_at — с момента создания
+last_active_at — с момента последней активности
+Настройки вывода
+Опция 	По умолчанию 	Описание
+-v 	— 	Уровень логирования: INFO
+-vv 	— 	Уровень логирования: DEBUG
+--format TEXT 	text 	Формат вывода: text или json
+Вывод
+
+При успешном выполнении команда выводит идентификатор и имя индекса.
+
+Пример текстового вывода:
+
+Search index created successfully!
+Search Index ID: fvt-hj87lxe3********
+Name: my-index
+
+Пример JSON-вывода:
+
+{
+  "status": "success",
+  "folder_id": "b1go3el0d8fs********",
+  "search_index": {
+    "id": "fvt-hj87lxe3********",
+    "name": "my-index"
+  }
+}
+response = client.responses.create(
+    model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
+    # SpeechKit Voice Profiler — несуществующий, по крайней мере пока, продукт, описание которого было передано в документах.
+    instructions="Ты помогаешь пользователю с документацией. При вопросах про SpeechKit Voice Profiler используй поиск по файлам.",
+    input="Расскажи про продукт SpeechKit Voice Profiler",
+    tools=[{
+        "type": "file_search",
+        "vector_store_ids": [<идентификатор_поискового_индекса>],
+        "max_num_results": 3
+    }]
+)response = client.responses.create(
+    model=f"gpt://{YANDEX_CLOUD_FOLDER}/{YANDEX_CLOUD_MODEL}",
+    input="Сделай краткий обзор последних новостей об LLM в 2025 году — только факты, без домыслов.",
+    tools=[
+        {
+            "type": "web_search",
+            "filters": {
+                "allowed_domains": [
+                    "habr.ru"
+                ],
+                "user_location": {
+                    "region": "213",
+                },
+            },
+            "search_context_size": "medium", # варианты: low | medium | high
+        }
+    ],
+    temperature=0.3,
+    max_output_tokens=1000
+)
+
+Аутентификация в Yandex AI Studio SDK выполняется путем передачи в модель объекта AIStudio, который содержит поля:
+
+    folder_id — идентификатор каталога, в котором вы будете работать с моделями.
+
+    auth — ключ, токен или другие данные для аутентификации, позволяющие идентифицировать субъекта. Значение поля auth может быть задано явно или получено автоматически из окружения:
+
+    Заданное явно значение поля auth может принимать одно из значений:
+
+        string — в форме строки можно передать:
+            IAM-токен пользовательского или сервисного аккаунта;
+            секретную часть API-ключа сервисного аккаунта;
+            OAuth-токен пользовательского аккаунта.
+
+        SDK автоматически определит тип аутентификационных данных.
+
+        Объект одного из следующих классов:
+
+            APIKeyAuth — позволяет явно задать аутентификацию по передаваемому API-ключу.
+            Например: auth = APIKeyAuth('<api_ключ>').
+
+            EnvIAMTokenAuth — позволяет явно задать аутентификацию по IAM-токену, заданному в переменной окружения YC_TOKEN или любой другой.
+            Например: auth = EnvIAMTokenAuth() или auth = EnvIAMTokenAuth("env_var").
+
+            SDK при каждом запросе заново получает IAM-токен из этой переменной окружения, поэтому вы можете вне SDK самостоятельно периодически обновлять IAM-токен в переменной окружения. Этот вариант аутентификации является оптимальным для использования с сервисным агентом в Yandex DataSphere, если для этого сервиса включен доступ к другим ресурсам в облаке пользователя.
+
+            IAMTokenAuth — позволяет явно задать аутентификацию по передаваемому IAM-токену.
+            Например: auth = IAMTokenAuth('<iam_токен>').
+
+            MetadataAuth — позволяет явно задать аутентификацию от имени сервисного аккаунта, заданного в метаданных виртуальной машины Yandex Compute Cloud.
+            Например: auth = MetadataAuth().
+
+            NoAuth — позволяет указать, что аутентификационные данные не будут передаваться.
+            Например: auth = NoAuth().
+
+            OAuthTokenAuth — позволяет явно задать аутентификацию по передаваемому OAuth-токену.
+            Например: auth = OAuthTokenAuth('<oauth_токен>').
+
+            YandexCloudCLIAuth — позволяет явно задать аутентификацию от имени пользователя или сервисного аккаунта, заданного в профиле Yandex Cloud CLI на компьютере пользователя.
+            Например: auth = YandexCloudCLIAuth().
+
+        Эти классы вы можете получить, импортировав из библиотеки AI Studio SDK. Например:
+
+        from yandex_ai_studio_sdk.auth import APIKeyAuth
+
+    Примечание
+
+    Время жизни IAM-токена — не более 12 часов. Учитывайте это, выполняя запросы с аутентификацией по IAM-токену, заданному в строке, объекте класса IAMTokenAuth или переменной окружения YC_IAM_TOKEN.
+
+Использование
+
+В качестве входных данных для запроса AI SDK может принимать:
+
+    Строку. Например: Что такое небо?.
+
+    Словарь — структуру данных, аналогичную JSON. Например: {"role": "role", "text": "text"}.
+
+    Объект класса TextMessage AI SDK. Например: result[0].
+
+    Объект result класса TextMessage представляет собой массив альтернатив, содержащихся в ответах модели. С помощью такого объекта можно передать предыдущий ответ модели в последующем запросе.
+
+    Массив, содержащий любое сочетание указанных выше типов данных. Например: ["text", {"role": "role", "text": "text"}].
+
+Пример ниже отправит в модель YandexGPT Pro запрос c промптом в форме строки «Что такое небо?».
+
+from yandex_ai_studio_sdk import AIStudio
+
+sdk = AIStudio(
+    folder_id="<идентификатор_каталога>",
+    auth="<аутентификационные_данные>",
+)
+
+model = sdk.models.completions("yandexgpt")
+model = model.configure(temperature=0.5)
+result = model.run("Что такое небо?")
+
+print(f'{result=}')
+
+print(f'{result[0]=}')
+
+print(f'{result.alternatives[0].role=}')
+
+print(f'{result.alternatives[0].text=}')
+
+print(f'{result.alternatives[0].status=}')
+
+Где:
+
+    folder_id — идентификатор каталога, в котором создан сервисный аккаунт.
+    auth — ключ, токен или другие данные для аутентификации, позволяющие идентифицировать субъекта.
+
+Результат:
+
+    Переменная result содержит массив альтернатив, содержащихся в ответах модели:
+
+    GPTModelResult(alternatives=(Alternative(role='assistant', text='Небо — это пространство над поверхностью Земли или другой планеты, которое мы видим, когда смотрим вверх. Оно может быть ясным и безоблачным, облачным или пасмурным, а ночью на нём появляются звёзды, луна и другие небесные тела.\n\nТакже слово «небо» может использоваться в переносном смысле, обозначая не только физическое пространство, но и нечто возвышенное, идеальное или божественное.', status=<AlternativeStatus.FINAL: 3>),), usage=Usage(input_text_tokens=14, completion_tokens=83, total_tokens=97), model_version='23.10.2024')
+
+    Элемент массива result[0] содержит объект result.alternatives[0] класса TextMessage AI SDK, который в свою очередь содержит поля role, text и status:
+
+    Alternative(role='assistant', text='Небо — это пространство над поверхностью Земли или другой планеты, которое мы видим, когда смотрим вверх. Оно может быть ясным и безоблачным, облачным или пасмурным, а ночью на нём появляются звёзды, луна и другие небесные тела.\n\nТакже слово «небо» может использоваться в переносном смысле, обозначая не только физическое пространство, но и нечто возвышенное, идеальное или божественное.', status=<AlternativeStatus.FINAL: 3>)
+
+    Поле result.alternatives[0].role содержит одно из значений роли отправителя сообщения:
+        user — предназначена для отправки пользовательских сообщений к модели.
+        system — позволяет задать контекст запроса и определить поведение модели.
+        assistant — используется для ответов, которые генерирует модель.
+
+    assistant
+
+    Поле result.alternatives[0].text содержит текст сообщения:
+
+    Небо — это пространство над поверхностью Земли или другой планеты, которое мы видим, когда смотрим вверх. Оно может быть ясным и безоблачным, облачным или пасмурным, а ночью на нём появляются звёзды, луна и другие небесные тела.
+
+    Также слово «небо» может использоваться в переносном смысле, обозначая не только физическое пространство, но и нечто возвышенное, идеальное или божественное.
+
+    Поле result.alternatives[0].status содержит статус сообщения. Возможные значения статуса:
+        UNSPECIFIED — статус не определен.
+        PARTIAL — часть сгенерированного текста, который может измениться в ходе дальнейшей генерации.
+        TRUNCATED_FINAL — итоговый сгенерированный текст, но результат превышает установленные ограничения.
+        FINAL — итоговый сгенерированный текст в пределах установленных ограничений.
+        CONTENT_FILTER — генерация остановлена из-за наличия конфиденциальных данных или этически ненадлежащих тем в промпте или сгенерированном тексте.
+
+    AlternativeStatus.FINAL: 3
+
+
+дополнительно:
+https://aistudio.yandex.ru/docs/ru/ai-studio/operations/index.html
+
+для парсинга текстового pdf использовать pdfplumber для парсинга сканов ии
+
+дизайн проект
+Create a modern, industrial-themed for ToIR (Maintenance and Repair)  with 7 distinct workspace sections.
+
+Design Requirements:
+1. Style: "Steel & Glass" - light mode, high-tech, premium industrial feel. Colors: Dark graphite background, neon blue accents, semi-transparent white elements.
+2. Background: Dynamic, interactive 3D mesh or abstract metallic shapes that move subtly based on cursor position (parallax effect). Use Three.js or similar lightweight library for performance.
+3. Navigation: A floating, rounded capsule-shaped navbar at the top center. It must have a glassmorphism effect (backdrop-filter: blur). Links to the 7 workspaces. Active state indicated by a glowing neon underline.
+4. Layout: 7 main sections (workspaces). Each section represents a different aspect of ToIR (e.g., Assets, Work Orders, Schedules, etc.).
+5. UI Elements: Cards and panels should use glassmorphism (transparency + blur + thin white border).
+6. Interactivity: Hover effects on cards (lift up + glow increase). Smooth scroll behavior between sections. Cursor custom style (optional: subtle tech crosshair).
+7. Tech Stack: React, Tailwind CSS, Framer Motion for animations. Ensure the interface is clean, readable, and professional.
