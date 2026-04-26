@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.models import (
+    ClassCharacteristic,
     ClassificationRule,
     Document,
     EquipmentClass,
@@ -12,16 +13,22 @@ from app.models.models import (
     NormalizationRule,
 )
 from app.schemas.schemas import (
+    AnalogSearchRequest,
     BulkVerifyRequest,
+    ClassCharacteristicRead,
+    ClassifyByNameRequest,
     DocumentRead,
+    EquipmentClassCard,
     EquipmentClassCreate,
     EquipmentClassRead,
+    EquipmentClassReadEx,
     EquipmentModelCreate,
     EquipmentModelDetail,
     EquipmentModelRead,
     EquipmentModelUpdate,
     EquipmentSubclassCreate,
     EquipmentSubclassRead,
+    HierarchyNodeCard,
     HierarchyNodeCreate,
     HierarchyNodeRead,
     HierarchyTreeRead,
@@ -30,6 +37,7 @@ from app.schemas.schemas import (
     NormalizationRuleRead,
 )
 from app.services.ai_service import yandex_ai
+from app.services.analogs import search_analogs_in_db
 from app.services.classification import classify_all_models
 from app.services.file_parser import detect_file_type, parse_file
 from app.services.normalization import normalize_model_name
@@ -298,9 +306,234 @@ def normalize_models(force: bool = Query(True), db: Session = Depends(get_db)):
     return MessageResponse(message=f"Normalized {updated} models")
 
 
-@router.get("/classes", response_model=list[EquipmentClassRead])
+@router.get("/classes", response_model=list[EquipmentClassReadEx])
 def get_classes(db: Session = Depends(get_db)):
-    return db.query(EquipmentClass).all()
+    """Список классов с подклассами и количеством ТОР по подклассам.
+
+    Используется во фронте для дерева классификатора и комбобокса
+    автодополнения класса/подкласса в карточке ТОР.
+    """
+    classes = (
+        db.query(EquipmentClass)
+        .options(joinedload(EquipmentClass.subclasses))
+        .order_by(EquipmentClass.name)
+        .all()
+    )
+
+    # Сколько моделей закреплено за каждым классом / подклассом — одним запросом.
+    from sqlalchemy import func
+
+    counts = (
+        db.query(
+            EquipmentModel.class_id,
+            EquipmentModel.subclass_id,
+            func.count(EquipmentModel.id),
+        )
+        .filter(EquipmentModel.class_id.isnot(None))
+        .group_by(EquipmentModel.class_id, EquipmentModel.subclass_id)
+        .all()
+    )
+
+    by_class: dict[int, int] = {}
+    by_subclass: dict[tuple[int, int | None], int] = {}
+    for cid, sid, n in counts:
+        by_class[cid] = by_class.get(cid, 0) + n
+        by_subclass[(cid, sid)] = n
+
+    result: list[EquipmentClassReadEx] = []
+    for cls in classes:
+        sub_counts: dict[str, int] = {
+            "_no_subclass": by_subclass.get((cls.id, None), 0),
+        }
+        for sub in cls.subclasses:
+            sub_counts[str(sub.id)] = by_subclass.get((cls.id, sub.id), 0)
+        result.append(
+            EquipmentClassReadEx(
+                id=cls.id,
+                name=cls.name,
+                subclasses=[EquipmentSubclassRead.model_validate(s) for s in cls.subclasses],
+                model_count=by_class.get(cls.id, 0),
+                subclass_counts=sub_counts,
+            )
+        )
+    return result
+
+
+@router.get("/classes/{class_id}/card", response_model=EquipmentClassCard)
+def get_class_card(
+    class_id: int,
+    subclass_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Карточка узла классификатора (класс или класс+подкласс).
+
+    По ТЗ §6.1: при клике на узел классификатора показываем характеристики,
+    кол-во ТОР и примеры моделей.
+    """
+    cls = db.query(EquipmentClass).options(joinedload(EquipmentClass.subclasses)).get(class_id)
+    if not cls:
+        raise HTTPException(404, "Class not found")
+
+    subclass = None
+    if subclass_id is not None:
+        subclass = db.query(EquipmentSubclass).get(subclass_id)
+        if not subclass or subclass.class_id != cls.id:
+            raise HTTPException(404, "Subclass does not belong to class")
+
+    chars_q = db.query(ClassCharacteristic).filter(ClassCharacteristic.class_id == cls.id)
+    if subclass is not None:
+        chars_q = chars_q.filter(
+            (ClassCharacteristic.subclass_id == subclass.id) | (ClassCharacteristic.subclass_id.is_(None))
+        )
+    characteristics = chars_q.order_by(ClassCharacteristic.id).all()
+
+    models_q = db.query(EquipmentModel).filter(EquipmentModel.class_id == cls.id)
+    if subclass is not None:
+        models_q = models_q.filter(EquipmentModel.subclass_id == subclass.id)
+    model_count = models_q.count()
+    sample_models = models_q.order_by(EquipmentModel.id.desc()).limit(20).all()
+
+    return EquipmentClassCard(
+        id=cls.id,
+        name=cls.name,
+        subclass_id=subclass.id if subclass else None,
+        subclass_name=subclass.name if subclass else None,
+        description=None,
+        model_count=model_count,
+        subclasses=[EquipmentSubclassRead.model_validate(s) for s in cls.subclasses],
+        characteristics=[ClassCharacteristicRead.model_validate(c) for c in characteristics],
+        sample_models=[EquipmentModelRead.model_validate(m) for m in sample_models],
+    )
+
+
+@router.get("/nodes/{node_id}/card", response_model=HierarchyNodeCard)
+def get_node_card(node_id: int, db: Session = Depends(get_db)):
+    """Карточка узла иерархии: имя, уровень, кол-во потомков и ТОР под узлом."""
+    node = db.query(HierarchyNode).get(node_id)
+    if not node:
+        raise HTTPException(404, "Node not found")
+
+    # Собираем все id потомков (включая сам узел) для подсчёта ТОР под узлом.
+    descendant_ids: set[int] = {node.id}
+    frontier = [node.id]
+    while frontier:
+        children_ids = [
+            cid for (cid,) in db.query(HierarchyNode.id).filter(HierarchyNode.parent_id.in_(frontier)).all()
+        ]
+        new_ids = [cid for cid in children_ids if cid not in descendant_ids]
+        descendant_ids.update(new_ids)
+        frontier = new_ids
+
+    children_count = db.query(HierarchyNode).filter(HierarchyNode.parent_id == node.id).count()
+    descendants_count = len(descendant_ids) - 1  # без самого узла
+
+    direct_models_count = db.query(EquipmentModel).filter(EquipmentModel.hierarchy_id == node.id).count()
+    descendant_models_count = (
+        db.query(EquipmentModel).filter(EquipmentModel.hierarchy_id.in_(descendant_ids)).count()
+    )
+    sample_models = (
+        db.query(EquipmentModel)
+        .filter(EquipmentModel.hierarchy_id.in_(descendant_ids))
+        .order_by(EquipmentModel.id.desc())
+        .limit(20)
+        .all()
+    )
+
+    return HierarchyNodeCard(
+        id=node.id,
+        name=node.name,
+        parent_id=node.parent_id,
+        level_type=node.level_type,
+        description=node.description,
+        custom_fields=node.custom_fields,
+        children_count=children_count,
+        descendants_count=descendants_count,
+        direct_models_count=direct_models_count,
+        descendant_models_count=descendant_models_count,
+        sample_models=[EquipmentModelRead.model_validate(m) for m in sample_models],
+    )
+
+
+@router.post("/models/{model_id}/classify", response_model=EquipmentModelDetail)
+def classify_model_by_name(
+    model_id: int,
+    data: ClassifyByNameRequest,
+    db: Session = Depends(get_db),
+):
+    """Привязка ТОР к классу/подклассу по имени с автосозданием.
+
+    Используется автокомплитом в карточке ТОР: пользователь либо выбирает
+    существующий класс/подкласс из списка, либо вводит новый и подтверждает
+    создание.
+    """
+    model = db.query(EquipmentModel).get(model_id)
+    if not model:
+        raise HTTPException(404, "Model not found")
+
+    class_name = (data.class_name or "").strip()
+    if not class_name:
+        raise HTTPException(400, "class_name is required")
+
+    cls = db.query(EquipmentClass).filter(EquipmentClass.name == class_name).first()
+    if not cls:
+        if not data.create_if_missing:
+            raise HTTPException(404, f"Class '{class_name}' not found")
+        cls = EquipmentClass(name=class_name)
+        db.add(cls)
+        db.flush()
+
+    sub: EquipmentSubclass | None = None
+    sub_name = (data.subclass_name or "").strip() if data.subclass_name else ""
+    if sub_name:
+        sub = (
+            db.query(EquipmentSubclass)
+            .filter(EquipmentSubclass.name == sub_name, EquipmentSubclass.class_id == cls.id)
+            .first()
+        )
+        if not sub:
+            if not data.create_if_missing:
+                raise HTTPException(404, f"Subclass '{sub_name}' not found in class '{class_name}'")
+            sub = EquipmentSubclass(name=sub_name, class_id=cls.id)
+            db.add(sub)
+            db.flush()
+
+    model.class_id = cls.id
+    model.subclass_id = sub.id if sub else None
+    model.source_type = "manual"
+    model.confidence = 1.0
+    db.commit()
+    db.refresh(model)
+
+    return get_model_detail(model_id=model.id, db=db)
+
+
+@router.post("/models/{model_id}/analogs")
+def model_analogs(
+    model_id: int,
+    data: AnalogSearchRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    """Подбор аналогов ТОР с возможностью выбрать характеристики поиска.
+
+    Алиас на `mass-processing/search-analogs/{model_id}` — нужен, чтобы
+    оставить весь functional, связанный с ТОР, в одном API-разделе.
+    """
+    model = db.query(EquipmentModel).get(model_id)
+    if not model:
+        raise HTTPException(404, "Model not found")
+
+    selected_ids = (data.selected_characteristic_ids if data else None) or []
+    limit = (data.limit if data else None) or 5
+
+    characteristics: dict[str, str] | None = None
+    if selected_ids:
+        characteristics = {}
+        for tor_char in model.characteristics:
+            if tor_char.id in selected_ids and tor_char.value is not None:
+                if tor_char.characteristic and tor_char.characteristic.name:
+                    characteristics[tor_char.characteristic.name] = str(tor_char.value)
+
+    return search_analogs_in_db(db=db, base_model=model, characteristics=characteristics, limit=limit)
 
 
 @router.post("/classes", response_model=EquipmentClassRead)

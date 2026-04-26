@@ -56,6 +56,24 @@ class EquipmentClassRead(EquipmentClassBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EquipmentClassReadEx(EquipmentClassRead):
+    """Класс с агрегатами для UI: количество ТОР по подклассам и без подкласса."""
+
+    model_count: int = 0
+    subclass_counts: dict[str, int] = {}
+
+
+class ClassifyByNameRequest(BaseModel):
+    class_name: str
+    subclass_name: str | None = None
+    create_if_missing: bool = True
+
+
+class AnalogSearchRequest(BaseModel):
+    selected_characteristic_ids: list[int] | None = None
+    limit: int = 5
+
+
 class EquipmentSubclassBase(BaseModel):
     name: str
     class_id: int
@@ -540,3 +558,37 @@ class ClassCharacteristicRead(BaseModel):
     required: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EquipmentClassCard(BaseModel):
+    """Карточка узла классификатора (класс или класс+подкласс).
+
+    По ТЗ §6.1: при клике на узел показываем характеристики, кол-во ТОР и
+    примеры моделей для быстрого визуального контекста.
+    """
+
+    id: int
+    name: str
+    subclass_id: int | None = None
+    subclass_name: str | None = None
+    description: str | None = None
+    model_count: int = 0
+    subclasses: list[EquipmentSubclassRead] = []
+    characteristics: list[ClassCharacteristicRead] = []
+    sample_models: list[EquipmentModelRead] = []
+
+
+class HierarchyNodeCard(BaseModel):
+    """Карточка узла иерархии: счётчики и пример ТОР под узлом."""
+
+    id: int
+    name: str
+    parent_id: int | None
+    level_type: str
+    description: str | None = None
+    custom_fields: dict[str, Any] | None = None
+    children_count: int = 0
+    descendants_count: int = 0
+    direct_models_count: int = 0
+    descendant_models_count: int = 0
+    sample_models: list[EquipmentModelRead] = []
