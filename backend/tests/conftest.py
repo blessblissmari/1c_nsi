@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -30,10 +31,8 @@ def _env_setup() -> Generator[None, None, None]:
         }
     )
     yield
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.unlink(db_path)
-    except FileNotFoundError:
-        pass
 
 
 @pytest.fixture()

@@ -54,9 +54,7 @@ def test_login_and_me(client):
     token = r.json()["access_token"]
     assert token
 
-    me = client.get(
-        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
-    )
+    me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me.status_code == 200
     assert me.json()["email"] == "u@example.com"
 
@@ -88,9 +86,7 @@ def test_protected_endpoint_with_token_ok(client):
         json={"email": "y@example.com", "password": "password1"},
     ).json()["access_token"]
 
-    r = client.get(
-        "/api/v1/hierarchy/tree", headers={"Authorization": f"Bearer {token}"}
-    )
+    r = client.get("/api/v1/hierarchy/tree", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
